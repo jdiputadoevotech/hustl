@@ -1,0 +1,93 @@
+CLAUDE CODE SYSTEM INSTRUCTION & MASTER PLAN
+Project: Hustl - USC Student Gig Marketplace
+Target Environment: Next.js (App Router), Supabase, Vercel (Zero-Cost Free Tiers)
+You are an expert full-stack engineer guiding a college team in building a localized, low-complexity freelance gig marketplace named Hustl for students at the University of San Carlos (USC). Your primary objective is to build a rock-solid, fully functioning CRUD application while keeping operational complexity and deployment friction at absolute zero.
+
+1. STRATEGIC ARCHITECTURE & STACK CHOICES (WHY THIS STACK)
+Next.js (React Framework) & Vercel (Hosting):
+
+Chosen because it provides a frictionless, zero-cost serverless hosting platform.
+
+Avoids the University's restrictive campus free-hosting environment, which blocks external API requests and restricts backend runtimes.
+
+Allows unified full-stack code management (Frontend components and Backend API Routes/Server Actions in one repo) that interfaces smoothly with your AI coding capabilities.
+
+Supabase (Backend-as-a-Service):
+
+Provides a zero-cost PostgreSQL database, built-in Authentication, and instant REST APIs out of the box.
+
+Eliminates the need to maintain an active 24/7 backend server container (which on free services like Render can spin down and cause annoying 50-second startup delays).
+
+Zero-API Communication & Payment Workarounds:
+
+No Live Chat Engines: Instead of building a custom Socket.io system or using paid messaging APIs, the Hustl platform logs the transaction state and seamlessly redirects the user to the student's Facebook Messenger using standard hyperlinking (https://m.me/username). This bypasses university API blocking completely and uses free infrastructure.
+
+No Stripe/PayPal Integration: All payments are Peer-to-Peer (P2P) handled off-platform by the students (e.g., GCash, cash on campus). The app strictly monitors and changes the state of the order, not the actual funds.
+
+2. BUSINESS & LOGIC REQUIREMENTS
+Email Domain Domain Restrictions:
+
+Gig Creators (Sellers): Must have a verified @usc.edu.ph email address to post gigs and fulfill orders.
+
+Clients (Buyers): Can register and log in using any email domain (e.g., @gmail.com, @yahoo.com, etc.) to browse, message, and place orders.
+
+Core CRUD Entities:
+
+Profiles (Users): Create (Registration), Read (Public Portfolios), Update (Bio, Skills, Messenger Username), Delete (Account).
+
+Gigs (Listings): Create (Post service), Read (Browse/Search marketplace), Update (Modify price/description), Delete (Remove listing).
+
+Orders (Transactions): Create (Inquire button click creates a 'Pending' record), Read (Dashboard lists), Update (Student advances state: Pending -> In Progress -> Completed / Cancelled).
+
+3. UI/UX DESIGN & LAYOUT REFERENCE
+When generating frontend designs, UI components, dashboard structures, and marketplace grid layouts, use the design paradigms, visual aesthetic, and structure found on the Fiverr web development category page as your main inspiration reference point:
+https://www.fiverr.com/categories/programming-tech/website-development?source=vertical-buckets
+
+Focus on clean gig summary cards, clear pricing typography, and prominent call-to-action buttons for getting in touch with the student freelancer.
+
+4. INITIALIZATION PROTOCOL (DO NOT SCAFFOLD FROM SCRATCH)
+Do NOT manually create boilerplate files or configure configurations from standard blank profiles. Utilize CLI initializers to ensure a bulletproof, official environment setup.
+
+Execute the following command in the terminal to initialize the workspace with an official, pre-configured Supabase authentication template:
+
+npx create-next-app -e with-supabase .
+
+(Note: The "." target specifies the current empty working directory. Accept default prompts for TypeScript, ESLint, Tailwind CSS, and App Router as pre-packaged in the template).
+
+5. DOCUMENTATION MANDATE
+Before deep-diving into component creation, you MUST generate two comprehensive documentation files in the root directory:
+
+Task A: Create SETUP.md
+This file must guide any student developer who clones this repository on how to run Hustl locally. It must include detailed, step-by-step instructions for:
+
+Cloning the repository and executing "npm install".
+
+Setting up a free account on Supabase, creating a new project, and retrieving the necessary environment keys (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY).
+
+Providing the local .env.local structural layout example.
+
+Setting up the SQL schema inside the Supabase SQL Editor (provide the explicit CREATE TABLE and Row Level Security (RLS) SQL declarations for profiles, gigs, and orders). Include the exact RLS policy to restrict gig creation only to @usc.edu.ph emails:
+
+CREATE POLICY "Allow gig creation only for Carolinians" ON public.gigs FOR INSERT WITH CHECK (auth.jwt() ->> 'email' LIKE '%@usc.edu.ph');
+
+Running "npm run dev" to access the local instance.
+
+Task B: Create DEPLOYMENT.md
+This file must outline the production configuration pipeline specifically targeting Vercel and Supabase Production Settings:
+
+Connecting the GitHub repository directly to Vercel for automated CI/CD deployment.
+
+Configuring Environment Variables within the Vercel Project Dashboard dashboard settings.
+
+Configuring the Supabase Authentication Production Redirect URLs so that authentication workflows securely route back to the production Vercel domain instead of localhost:3000.
+
+6. DATABASE SCHEMA BLUEPRINT TO IMPLEMENT
+Ensure your internal relational generation aligns with this precise structural paradigm:
+
+profiles Table: Links to Supabase Auth (id matches auth.users.id). Tracks full_name, messenger_username, and registration timestamps.
+
+gigs Table: Belongs to a student (student_id foreign key maps to profiles.id). Tracks title, description, price (numeric), category, and image reference points.
+
+orders Table: Relates a client (client_id) to a gig (gig_id). Tracks the lifecycle status text flag: Pending, In Progress, Completed, Cancelled.
+
+Now, execute the initialization command, construct the documentation markdown files (SETUP.md and DEPLOYMENT.md), and prepare the project architecture for subsequent step-by-step page development.
