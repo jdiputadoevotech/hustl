@@ -47,13 +47,15 @@ export interface Gig {
 }
 
 /**
- * A transaction inquiry created when a client clicks "Inquire" on a gig.
- * Funds are handled off-platform (P2P); only the status is tracked here.
+ * A transaction record. The freelancer (seller) creates these after a buyer
+ * contacts them on Messenger, identifying the buyer by email. Funds are handled
+ * off-platform (P2P); only the status is tracked here.
  */
 export interface Order {
   id: string; // uuid
   gig_id: string; // uuid, FK -> gigs.id
-  client_id: string; // uuid, FK -> profiles.id (the buyer)
+  client_id: string | null; // uuid, FK -> profiles.id; null for email-only buyers
+  client_email: string | null; // buyer email supplied by the freelancer
   status: OrderStatus;
   created_at: string; // timestamptz
   updated_at: string; // timestamptz

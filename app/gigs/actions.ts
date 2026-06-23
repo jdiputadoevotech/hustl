@@ -96,35 +96,3 @@ export async function deleteGig(gigId: string) {
   revalidatePath("/gigs");
   redirect("/dashboard");
 }
-
-/**
- * Inquire = create a Pending order, then hand off to the seller's Messenger.
- * Funds are settled P2P off-platform; only the order status lives in Hustl.
- */
-export async function createInquiry(gigId: string) {
-  const user = await getCurrentUser();
-  if (!user) redirect(`/auth/login`);
-
-  const supabase = await createClient();
-
-  // Fetch gig + seller's messenger handle.
-  const { data: gig } = await supabase
-    .from("gigs")
-    .select("id, student_id, profiles ( messenger_username )")
-    .eq("id", gigId)
-    .single();
-
-  await supabase
-    .from("orders")
-    .insert({ gig_id: gigId, client_id: user.id, status: "Pending" });
-
-  revalidatePath("/dashboard");
-
-  const seller = gig?.profiles as { messenger_username?: string | null } | null;
-  const handle = seller?.messenger_username?.trim();
-  if (handle) {
-    redirect(`https://m.me/${handle}`);
-  }
-  // No Messenger handle on file — send the buyer to their dashboard.
-  redirect("/dashboard?inquiry=created");
-}

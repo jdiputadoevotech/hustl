@@ -3,20 +3,22 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { OrderStatusBadge } from "@/components/marketplace/order-status-badge";
-import { updateOrderStatus } from "./actions";
+import { updateOrderStatus, createSellerOrder } from "./actions";
 import type { OrderStatus } from "@/lib/types/database";
 
 export const metadata = { title: "Dashboard — Hustl" };
 
-type SearchParams = Promise<{ inquiry?: string }>;
+type SearchParams = Promise<{ orderCreated?: string; orderError?: string }>;
 
 export default async function DashboardPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const { inquiry } = await searchParams;
+  const { orderCreated, orderError } = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/auth/login");
 
@@ -29,14 +31,22 @@ export default async function DashboardPage({
     .eq("client_id", user.id)
     .order("created_at", { ascending: false });
 
-  // Orders placed on my gigs (seller view).
+  // Orders placed on my gigs (seller view) + my gigs for the create-order form.
   const { data: salesOrders } = user.isSeller
     ? await supabase
         .from("orders")
         .select(
-          "id, status, created_at, gigs!inner ( id, title, student_id ), profiles ( full_name, messenger_username )",
+          "id, status, created_at, client_email, gigs!inner ( id, title, student_id ), profiles ( full_name, messenger_username )",
         )
         .eq("gigs.student_id", user.id)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const { data: myGigs } = user.isSeller
+    ? await supabase
+        .from("gigs")
+        .select("id, title")
+        .eq("student_id", user.id)
         .order("created_at", { ascending: false })
     : { data: [] };
 
@@ -49,10 +59,14 @@ export default async function DashboardPage({
         </Button>
       </div>
 
-      {inquiry === "created" && (
+      {orderCreated && (
         <p className="text-sm border rounded-md p-3 bg-accent">
-          Your inquiry was recorded. The seller has no Messenger handle on file
-          yet — check back here for status updates.
+          Order created. It&apos;s now in your gig orders below as Pending.
+        </p>
+      )}
+      {orderError && (
+        <p className="text-sm border border-destructive/40 text-destructive rounded-md p-3">
+          {orderError}
         </p>
       )}
 
@@ -96,6 +110,48 @@ export default async function DashboardPage({
       {/* ---- Sales (seller) ---- */}
       {user.isSeller && (
         <section className="space-y-4">
+          {/* Create an order from a buyer's Messenger inquiry */}
+          {myGigs && myGigs.length > 0 && (
+            <div className="rounded-lg border p-4 space-y-3">
+              <h2 className="text-lg font-semibold">Create an order</h2>
+              <p className="text-sm text-muted-foreground">
+                A buyer messaged you? Create their order here using the email
+                they sent.
+              </p>
+              <form
+                action={createSellerOrder}
+                className="flex flex-col sm:flex-row gap-3 sm:items-end"
+              >
+                <div className="space-y-1.5">
+                  <Label htmlFor="gig_id">Gig</Label>
+                  <select
+                    id="gig_id"
+                    name="gig_id"
+                    required
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    {myGigs.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5 flex-1">
+                  <Label htmlFor="client_email">Buyer email</Label>
+                  <Input
+                    id="client_email"
+                    name="client_email"
+                    type="email"
+                    required
+                    placeholder="buyer@example.com"
+                  />
+                </div>
+                <Button type="submit">Create order</Button>
+              </form>
+            </div>
+          )}
+
           <h2 className="text-lg font-semibold">Orders on my gigs</h2>
           {!salesOrders || salesOrders.length === 0 ? (
             <p className="text-muted-foreground text-sm">No orders yet.</p>
@@ -110,6 +166,8 @@ export default async function DashboardPage({
                   full_name: string | null;
                   messenger_username: string | null;
                 } | null;
+                const buyerLabel =
+                  buyer?.full_name ?? o.client_email ?? "a client";
                 const status = o.status as OrderStatus;
                 return (
                   <li key={o.id} className="p-4 space-y-3">
@@ -122,7 +180,7 @@ export default async function DashboardPage({
                           {gig?.title ?? "Removed gig"}
                         </Link>
                         <p className="text-xs text-muted-foreground">
-                          from {buyer?.full_name ?? "a client"}
+                          from {buyerLabel}
                           {buyer?.messenger_username && (
                             <>
                               {" · "}

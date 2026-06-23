@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { StarRating } from "@/components/marketplace/star-rating";
 import { ReviewList, type ReviewItem } from "@/components/marketplace/review-list";
 import { ReviewForm } from "@/components/marketplace/review-form";
-import { createInquiry, deleteGig } from "../actions";
+import { ContactSellerButton } from "@/components/marketplace/contact-seller-button";
+import { deleteGig } from "../actions";
 
 const peso = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -68,18 +69,8 @@ export default async function GigDetailPage({
   const average =
     count > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / count : 0;
 
-  // Review eligibility: signed-in non-owner who has an order on this gig.
-  let canReview = false;
-  if (user && !isOwner) {
-    const { data: order } = await supabase
-      .from("orders")
-      .select("id")
-      .eq("gig_id", id)
-      .eq("client_id", user.id)
-      .limit(1)
-      .maybeSingle();
-    canReview = !!order;
-  }
+  // Review eligibility: any signed-in user who isn't the gig owner.
+  const canReview = !!user && !isOwner;
   const existing = user
     ? (reviewsRaw ?? []).find((r) => r.reviewer_id === user.id)
     : undefined;
@@ -145,16 +136,23 @@ export default async function GigDetailPage({
                   </Button>
                 </form>
               </div>
+            ) : user ? (
+              <ContactSellerButton
+                gigId={gig.id}
+                gigTitle={gig.title}
+                sellerName={seller?.full_name ?? "there"}
+                sellerHandle={seller?.messenger_username ?? null}
+                buyerEmail={user.email}
+              />
             ) : (
-              <form action={createInquiry.bind(null, gig.id)}>
-                <Button type="submit" className="w-full">
-                  Contact on Messenger
+              <div className="space-y-2">
+                <Button asChild className="w-full">
+                  <Link href={`/auth/login`}>Sign in to contact</Link>
                 </Button>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Creates an order and opens the seller&apos;s Messenger. Payment
-                  is settled between you and the seller.
+                <p className="text-xs text-muted-foreground">
+                  Sign in so the seller gets your email to create the order.
                 </p>
-              </form>
+              </div>
             )}
           </div>
         </aside>

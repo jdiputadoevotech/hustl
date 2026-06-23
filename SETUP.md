@@ -97,15 +97,18 @@ create table public.gigs (
 );
 
 -- ---------- ORDERS ----------
--- A transaction inquiry. App tracks status only; payment is P2P off-platform.
+-- A transaction record. The freelancer (seller) creates orders after a buyer
+-- contacts them on Messenger, identifying the buyer by email. App tracks status
+-- only; payment is P2P off-platform.
 create table public.orders (
-  id         uuid primary key default gen_random_uuid(),
-  gig_id     uuid not null references public.gigs (id) on delete cascade,
-  client_id  uuid not null references public.profiles (id) on delete cascade,
-  status     text not null default 'Pending'
-             check (status in ('Pending','In Progress','Completed','Cancelled')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  id           uuid primary key default gen_random_uuid(),
+  gig_id       uuid not null references public.gigs (id) on delete cascade,
+  client_id    uuid references public.profiles (id) on delete cascade, -- nullable: email-only buyers
+  client_email text,                                                   -- buyer email entered by the seller
+  status       text not null default 'Pending'
+               check (status in ('Pending','In Progress','Completed','Cancelled')),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
 );
 
 -- ============================================================
@@ -166,10 +169,12 @@ create policy "Orders visible to client and gig owner"
     or auth.uid() = (select student_id from public.gigs where gigs.id = orders.gig_id)
   );
 
--- Any authenticated user can place an order, as themselves.
-create policy "Clients can create their own orders"
+-- The seller who owns the gig creates orders (identifying the buyer by email).
+create policy "Sellers can create orders on their gigs"
   on public.orders for insert
-  with check (auth.uid() = client_id);
+  with check (
+    auth.uid() = (select student_id from public.gigs where gigs.id = orders.gig_id)
+  );
 
 -- Only the seller who owns the gig can advance the order status.
 create policy "Sellers can update orders on their gigs"
@@ -180,6 +185,21 @@ create policy "Sellers can update orders on their gigs"
   with check (
     auth.uid() = (select student_id from public.gigs where gigs.id = orders.gig_id)
   );
+
+-- Helper: resolve a buyer's email to their user id so a seller can only create
+-- an order for a registered Hustl account (returns null when none exists).
+-- SECURITY DEFINER lets it read auth.users; only signed-in users may call it.
+create or replace function public.lookup_user_by_email(p_email text)
+returns uuid
+language sql
+security definer
+set search_path = public
+as $$
+  select id from auth.users where lower(email) = lower(trim(p_email)) limit 1;
+$$;
+
+revoke all on function public.lookup_user_by_email(text) from public, anon;
+grant execute on function public.lookup_user_by_email(text) to authenticated;
 
 -- ============================================================
 -- AUTO-CREATE PROFILE ON SIGNUP
@@ -247,15 +267,13 @@ create policy "Reviews are viewable by everyone"
   on public.reviews for select
   using (true);
 
--- Only a buyer who has an order on the gig may post, and only as themselves.
-create policy "Buyers who ordered can review"
+-- Any logged-in user may review, as themselves, except on their own gig.
+create policy "Logged-in users can review"
   on public.reviews for insert
   with check (
     reviewer_id = auth.uid()
-    and exists (
-      select 1 from public.orders o
-      where o.gig_id = reviews.gig_id
-        and o.client_id = auth.uid()
+    and auth.uid() <> (
+      select g.student_id from public.gigs g where g.id = reviews.gig_id
     )
   );
 
