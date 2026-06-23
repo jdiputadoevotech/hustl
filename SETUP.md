@@ -194,7 +194,12 @@ begin
   insert into public.profiles (id, full_name, is_seller)
   values (
     new.id,
-    new.raw_user_meta_data ->> 'full_name',
+    -- Default display name: the signup full_name if given, otherwise the
+    -- part of the email before the "@" (e.g. juan.delacruz@usc.edu.ph -> juan.delacruz).
+    coalesce(
+      nullif(new.raw_user_meta_data ->> 'full_name', ''),
+      split_part(new.email, '@', 1)
+    ),
     (new.email like '%@usc.edu.ph')
   );
   return new;
@@ -204,6 +209,14 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Backfill: give existing accounts that have no name the email local-part.
+-- (The trigger above only runs for new signups.)
+update public.profiles p
+set full_name = split_part(u.email, '@', 1)
+from auth.users u
+where p.id = u.id
+  and (p.full_name is null or p.full_name = '');
 ```
 
 ### Reviews & ratings
