@@ -79,7 +79,7 @@ export default async function ProfilePage({ params }: { params: Params }) {
           {!gigs || gigs.length === 0 ? (
             <p className="text-muted-foreground text-sm">No gigs yet.</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {gigs.map((g) => (
                 <GigCard key={g.id} gig={g} />
               ))}

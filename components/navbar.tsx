@@ -1,39 +1,87 @@
 import Link from "next/link";
-import { Suspense } from "react";
-import { AuthButton } from "@/components/auth-button";
-import { EnvVarWarning } from "@/components/env-var-warning";
-import { ThemeSwitcher } from "@/components/theme-switcher";
+import { Search } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth";
 import { hasEnvVars } from "@/lib/utils";
+import { EnvVarWarning } from "@/components/env-var-warning";
+import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/user-menu";
 
 /**
- * Global top nav rendered in the root layout. Links to the marketplace and the
- * signed-in user's dashboard; auth state on the right.
+ * Fiverr-style top nav: logo, centered marketplace search, and either the
+ * Orders link + avatar menu (signed in) or sign in / join (signed out).
  */
-export function Navbar() {
+export async function Navbar() {
+  const user = hasEnvVars ? await getCurrentUser() : null;
+
+  let displayName = "";
+  if (user) {
+    const supabase = await createClient();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .single();
+    displayName = profile?.full_name || user.email.split("@")[0];
+  }
+
   return (
-    <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16 sticky top-0 bg-background z-10">
-      <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
-        <div className="flex gap-5 items-center font-semibold">
-          <Link href="/" className="text-base">
-            Hustl
-          </Link>
-          <div className="hidden sm:flex gap-4 items-center font-normal text-muted-foreground">
-            <Link href="/gigs" className="hover:text-foreground">
-              Browse gigs
-            </Link>
-            <Link href="/dashboard" className="hover:text-foreground">
-              Dashboard
-            </Link>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <ThemeSwitcher />
+    <nav className="w-full border-b bg-background sticky top-0 z-10">
+      <div className="mx-auto w-full max-w-[1400px] flex items-center gap-6 sm:gap-8 px-6 lg:px-8 h-20">
+        {/* Logo */}
+        <Link href="/" className="text-4xl font-bold tracking-tight shrink-0">
+          Hustl<span className="text-green-500">.</span>
+        </Link>
+
+        {/* Search */}
+        <form
+          action="/gigs"
+          method="get"
+          className="flex-1 max-w-3xl flex"
+          role="search"
+        >
+          <input
+            name="q"
+            type="search"
+            placeholder="What service are you looking for today?"
+            aria-label="Search gigs"
+            className="h-12 w-full rounded-l-md border border-r-0 border-input bg-transparent px-5 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <button
+            type="submit"
+            aria-label="Search"
+            className="h-12 px-5 rounded-r-md bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90"
+          >
+            <Search className="h-5 w-5" />
+          </button>
+        </form>
+
+        {/* Right side */}
+        <div className="flex items-center gap-5 sm:gap-6 shrink-0 ml-auto">
           {!hasEnvVars ? (
             <EnvVarWarning />
+          ) : user ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="hidden sm:inline text-base font-medium text-foreground/80 hover:text-foreground"
+              >
+                Orders
+              </Link>
+              <UserMenu userId={user.id} name={displayName} />
+            </>
           ) : (
-            <Suspense>
-              <AuthButton />
-            </Suspense>
+            <>
+              <Link
+                href="/auth/login"
+                className="text-base font-medium text-foreground/80 hover:text-foreground"
+              >
+                Sign in
+              </Link>
+              <Button asChild size="lg">
+                <Link href="/auth/sign-up">Join</Link>
+              </Button>
+            </>
           )}
         </div>
       </div>

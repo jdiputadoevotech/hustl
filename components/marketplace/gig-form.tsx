@@ -44,8 +44,8 @@ export function GigForm({ action, gig, submitLabel, error }: GigFormProps) {
         >
           <option value="">Select a category</option>
           {GIG_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
+            <option key={c.name} value={c.name}>
+              {c.name}
             </option>
           ))}
         </select>
