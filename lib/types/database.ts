@@ -58,3 +58,27 @@ export interface Order {
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }
+
+/**
+ * A 1–5 star review left by a buyer on a gig. One per (gig, reviewer);
+ * eligibility (must have ordered the gig) is enforced by RLS. See SETUP.md.
+ */
+export interface Review {
+  id: string; // uuid
+  gig_id: string; // uuid, FK -> gigs.id
+  reviewer_id: string; // uuid, FK -> profiles.id
+  rating: number; // 1..5
+  comment: string | null;
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
+}
+
+/**
+ * Row shape of the `gigs_with_ratings` view: every gig column plus the seller's
+ * name and aggregated rating. Used by the browse grid and profile gig lists.
+ */
+export interface GigWithRating extends Gig {
+  seller_name: string | null;
+  rating_avg: number; // 0 when no reviews
+  rating_count: number;
+}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { AvatarInitials } from "@/components/marketplace/avatar-initials";
+import { StarRating } from "@/components/marketplace/star-rating";
 import type { Gig } from "@/lib/types/database";
 
 const peso = new Intl.NumberFormat("en-PH", {
@@ -14,14 +15,17 @@ type GigCardData = Pick<
   "id" | "title" | "price" | "category" | "image_url"
 > & {
   seller_name?: string | null;
+  rating_avg?: number | null;
+  rating_count?: number | null;
 };
 
-/** Fiverr-style summary card used in the browse grid and profile pages. */
+/** Fiverr-style gig card: cover image, seller row, title, rating, price. */
 export function GigCard({ gig }: { gig: GigCardData }) {
+  const sellerName = gig.seller_name ?? "Carolinian";
   return (
-    <Link href={`/gigs/${gig.id}`} className="group">
-      <Card className="overflow-hidden h-full transition-shadow group-hover:shadow-md">
-        <div className="relative aspect-video bg-muted">
+    <Link href={`/gigs/${gig.id}`} className="group block">
+      <div className="overflow-hidden rounded-lg border bg-card transition-shadow group-hover:shadow-md">
+        <div className="relative aspect-[4/3] bg-muted">
           {gig.image_url ? (
             <Image
               src={gig.image_url}
@@ -36,24 +40,32 @@ export function GigCard({ gig }: { gig: GigCardData }) {
             </div>
           )}
         </div>
-        <CardContent className="p-4 space-y-1">
-          {gig.category && (
-            <span className="text-xs text-muted-foreground">{gig.category}</span>
-          )}
-          <h3 className="font-medium leading-snug line-clamp-2">{gig.title}</h3>
-          {gig.seller_name && (
-            <p className="text-xs text-muted-foreground">by {gig.seller_name}</p>
-          )}
-        </CardContent>
-        <CardFooter className="p-4 pt-0">
-          <span className="text-sm text-muted-foreground">
-            Starting at{" "}
-            <span className="font-semibold text-foreground">
-              {peso.format(gig.price)}
-            </span>
-          </span>
-        </CardFooter>
-      </Card>
+
+        <div className="p-3 space-y-2">
+          {/* Seller row */}
+          <div className="flex items-center gap-2">
+            <AvatarInitials name={sellerName} className="h-6 w-6 text-[10px]" />
+            <span className="text-sm font-medium truncate">{sellerName}</span>
+          </div>
+
+          {/* Title */}
+          <p className="text-sm text-muted-foreground line-clamp-2 min-h-10 group-hover:text-foreground">
+            {gig.title}
+          </p>
+
+          {/* Rating */}
+          <StarRating
+            average={gig.rating_avg ?? 0}
+            count={gig.rating_count ?? 0}
+          />
+
+          {/* Price */}
+          <p className="pt-1 text-sm border-t">
+            <span className="text-muted-foreground">From </span>
+            <span className="font-bold">{peso.format(gig.price)}</span>
+          </p>
+        </div>
+      </div>
     </Link>
   );
 }

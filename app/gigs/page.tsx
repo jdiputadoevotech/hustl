@@ -19,8 +19,10 @@ export default async function GigsPage({
   const supabase = await createClient();
 
   let query = supabase
-    .from("gigs")
-    .select("id, title, price, category, image_url, profiles ( full_name )")
+    .from("gigs_with_ratings")
+    .select(
+      "id, title, price, category, image_url, seller_name, rating_avg, rating_count",
+    )
     .order("created_at", { ascending: false });
 
   if (q) query = query.ilike("title", `%${q}%`);
@@ -71,22 +73,21 @@ export default async function GigsPage({
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {gigs.map((g) => {
-            const seller = g.profiles as { full_name?: string | null } | null;
-            return (
-              <GigCard
-                key={g.id}
-                gig={{
-                  id: g.id,
-                  title: g.title,
-                  price: g.price,
-                  category: g.category,
-                  image_url: g.image_url,
-                  seller_name: seller?.full_name ?? null,
-                }}
-              />
-            );
-          })}
+          {gigs.map((g) => (
+            <GigCard
+              key={g.id}
+              gig={{
+                id: g.id,
+                title: g.title,
+                price: g.price,
+                category: g.category,
+                image_url: g.image_url,
+                seller_name: g.seller_name,
+                rating_avg: g.rating_avg,
+                rating_count: g.rating_count,
+              }}
+            />
+          ))}
         </div>
       )}
     </div>

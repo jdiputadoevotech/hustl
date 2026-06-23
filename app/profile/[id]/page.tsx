@@ -21,8 +21,10 @@ export default async function ProfilePage({ params }: { params: Params }) {
   if (!profile) notFound();
 
   const { data: gigs } = await supabase
-    .from("gigs")
-    .select("id, title, price, category, image_url")
+    .from("gigs_with_ratings")
+    .select(
+      "id, title, price, category, image_url, seller_name, rating_avg, rating_count",
+    )
     .eq("student_id", id)
     .order("created_at", { ascending: false });
 

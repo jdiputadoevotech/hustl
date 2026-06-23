@@ -206,6 +206,73 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 ```
 
+### Reviews & ratings
+
+Run this block too — it adds the `reviews` table, its RLS policies, and a
+`gigs_with_ratings` view used by the marketplace cards to show the average
+star rating without loading every review.
+
+```sql
+-- ---------- REVIEWS ----------
+-- One 1-5 star review per (gig, reviewer). Only buyers who ordered the gig
+-- may insert (enforced below). Reviewers can edit/delete their own.
+create table public.reviews (
+  id          uuid primary key default gen_random_uuid(),
+  gig_id      uuid not null references public.gigs (id) on delete cascade,
+  reviewer_id uuid not null references public.profiles (id) on delete cascade,
+  rating      int  not null check (rating between 1 and 5),
+  comment     text,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  unique (gig_id, reviewer_id)
+);
+
+alter table public.reviews enable row level security;
+
+-- Anyone can read reviews.
+create policy "Reviews are viewable by everyone"
+  on public.reviews for select
+  using (true);
+
+-- Only a buyer who has an order on the gig may post, and only as themselves.
+create policy "Buyers who ordered can review"
+  on public.reviews for insert
+  with check (
+    reviewer_id = auth.uid()
+    and exists (
+      select 1 from public.orders o
+      where o.gig_id = reviews.gig_id
+        and o.client_id = auth.uid()
+    )
+  );
+
+-- Reviewers can edit their own review.
+create policy "Reviewers can update their own review"
+  on public.reviews for update
+  using (reviewer_id = auth.uid())
+  with check (reviewer_id = auth.uid());
+
+-- Reviewers can delete their own review.
+create policy "Reviewers can delete their own review"
+  on public.reviews for delete
+  using (reviewer_id = auth.uid());
+
+-- ---------- RATINGS VIEW ----------
+-- Each gig + seller name + aggregated rating. Read by the browse grid and
+-- profile gig lists. Inherits the underlying tables' RLS (reviews/gigs are
+-- publicly readable), so no extra policy is required.
+create or replace view public.gigs_with_ratings as
+select
+  g.*,
+  p.full_name as seller_name,
+  coalesce(round(avg(r.rating), 1), 0)::numeric(2, 1) as rating_avg,
+  count(r.id) as rating_count
+from public.gigs g
+left join public.profiles p on p.id = g.student_id
+left join public.reviews  r on r.gig_id = g.id
+group by g.id, p.full_name;
+```
+
 ---
 
 ## 5. Set up Storage for gig images
