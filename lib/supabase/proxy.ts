@@ -47,12 +47,17 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  if (
-    request.nextUrl.pathname !== "/" &&
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
-  ) {
+  // Public routes (no auth required): landing, marketplace browse/detail,
+  // public profiles, and the auth flow. Everything else requires a session.
+  const { pathname } = request.nextUrl;
+  const isPublic =
+    pathname === "/" ||
+    pathname.startsWith("/gigs") ||
+    pathname.startsWith("/profile") ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/auth");
+
+  if (!isPublic && !user) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
