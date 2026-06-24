@@ -24,7 +24,7 @@ export function BudgetFilter({ max }: { max?: string }) {
   }, []);
 
   const push = (next: URLSearchParams) => {
-    router.push(`/gigs?${next.toString()}`);
+    router.push(`/jobs?${next.toString()}`);
     setOpen(false);
   };
 

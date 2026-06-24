@@ -6,41 +6,57 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 
 /**
- * Create or update the current user's review for a gig (one per gig). RLS
- * requires the user to have an order on the gig, so an ineligible attempt
- * fails at the database. Uses upsert on the (gig_id, reviewer_id) unique key.
+ * Create or update the student's review of an employer for a Completed
+ * contract. RLS also enforces the Completed + student check; here we resolve
+ * the employer/job from the contract and upsert on the contract_id unique key.
  */
-export async function submitReview(gigId: string, formData: FormData) {
+export async function submitReview(contractId: string, formData: FormData) {
   const user = await getCurrentUser();
   if (!user) redirect("/auth/login");
 
   const rating = Number(formData.get("rating") ?? 0);
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-    redirect(`/gigs/${gigId}?reviewError=Pick%20a%20rating%20from%201%20to%205`);
+    redirect("/dashboard?contractError=Pick%20a%20rating%20from%201%20to%205");
   }
 
   const supabase = await createClient();
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("id, employer_id, student_id, job_id, status")
+    .eq("id", contractId)
+    .single();
+
+  if (
+    !contract ||
+    contract.student_id !== user.id ||
+    contract.status !== "Completed"
+  ) {
+    redirect("/dashboard?contractError=You%20can%27t%20review%20that%20contract");
+  }
+
   const { error } = await supabase.from("reviews").upsert(
     {
-      gig_id: gigId,
+      contract_id: contractId,
+      employer_id: contract.employer_id,
       reviewer_id: user.id,
+      job_id: contract.job_id,
       rating,
       comment: String(formData.get("comment") ?? "").trim() || null,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "gig_id,reviewer_id" },
+    { onConflict: "contract_id" },
   );
 
   if (error) {
-    redirect(`/gigs/${gigId}?reviewError=${encodeURIComponent(error.message)}`);
+    redirect(`/dashboard?contractError=${encodeURIComponent(error.message)}`);
   }
 
-  revalidatePath(`/gigs/${gigId}`);
-  revalidatePath("/gigs");
-  redirect(`/gigs/${gigId}`);
+  revalidatePath("/dashboard");
+  revalidatePath(`/profile/${contract.employer_id}`);
+  redirect("/dashboard?contractOk=Review+saved");
 }
 
-export async function deleteReview(gigId: string) {
+export async function deleteReview(contractId: string) {
   const user = await getCurrentUser();
   if (!user) redirect("/auth/login");
 
@@ -48,10 +64,9 @@ export async function deleteReview(gigId: string) {
   await supabase
     .from("reviews")
     .delete()
-    .eq("gig_id", gigId)
+    .eq("contract_id", contractId)
     .eq("reviewer_id", user.id);
 
-  revalidatePath(`/gigs/${gigId}`);
-  revalidatePath("/gigs");
-  redirect(`/gigs/${gigId}`);
+  revalidatePath("/dashboard");
+  redirect("/dashboard?contractOk=Review+removed");
 }

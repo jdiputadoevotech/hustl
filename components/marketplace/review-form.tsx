@@ -9,12 +9,12 @@ import { Label } from "@/components/ui/label";
 import { submitReview, deleteReview } from "@/app/reviews/actions";
 
 interface ReviewFormProps {
-  gigId: string;
+  contractId: string;
   existing?: { rating: number; comment: string | null } | null;
 }
 
-/** Star-picker + comment form to create or edit the current user's review. */
-export function ReviewForm({ gigId, existing }: ReviewFormProps) {
+/** Star-picker + comment form to create or edit a review of the employer. */
+export function ReviewForm({ contractId, existing }: ReviewFormProps) {
   const [rating, setRating] = useState(existing?.rating ?? 0);
   const [hover, setHover] = useState(0);
 
@@ -24,7 +24,7 @@ export function ReviewForm({ gigId, existing }: ReviewFormProps) {
         {existing ? "Edit your review" : "Write a review"}
       </h3>
 
-      <form action={submitReview.bind(null, gigId)} className="space-y-4">
+      <form action={submitReview.bind(null, contractId)} className="space-y-4">
         <input type="hidden" name="rating" value={rating} />
 
         <div className="space-y-1.5">
@@ -60,7 +60,7 @@ export function ReviewForm({ gigId, existing }: ReviewFormProps) {
             name="comment"
             rows={3}
             defaultValue={existing?.comment ?? ""}
-            placeholder="How was working with this seller?"
+            placeholder="How was working with this employer?"
           />
         </div>
 
@@ -72,7 +72,7 @@ export function ReviewForm({ gigId, existing }: ReviewFormProps) {
       </form>
 
       {existing && (
-        <form action={deleteReview.bind(null, gigId)}>
+        <form action={deleteReview.bind(null, contractId)}>
           <Button type="submit" variant="ghost" size="sm" className="text-destructive">
             Delete my review
           </Button>

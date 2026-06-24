@@ -89,7 +89,7 @@ export default async function EditProfilePage({
       <form action={deleteAccount} className="space-y-2">
         <h2 className="text-sm font-semibold text-destructive">Danger zone</h2>
         <p className="text-xs text-muted-foreground">
-          Deletes your profile and all your gigs and orders. This cannot be
+          Deletes your profile and all your jobs and contracts. This cannot be
           undone.
         </p>
         <Button type="submit" variant="destructive" size="sm">

@@ -1,15 +1,15 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
-import { GigForm } from "@/components/marketplace/gig-form";
-import { updateGig } from "../../actions";
+import { JobForm } from "@/components/marketplace/job-form";
+import { updateJob } from "../../actions";
 
-export const metadata = { title: "Edit gig — Hustl" };
+export const metadata = { title: "Edit job — Hustl" };
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{ error?: string }>;
 
-export default async function EditGigPage({
+export default async function EditJobPage({
   params,
   searchParams,
 }: {
@@ -23,21 +23,23 @@ export default async function EditGigPage({
   if (!user) redirect("/auth/login");
 
   const supabase = await createClient();
-  const { data: gig } = await supabase
-    .from("gigs")
-    .select("id, title, description, price, category, image_url, student_id")
+  const { data: job } = await supabase
+    .from("jobs")
+    .select(
+      "id, title, description, job_type, category, pay_min, pay_max, pay_period, employer_id",
+    )
     .eq("id", id)
     .single();
 
-  if (!gig) notFound();
-  if (gig.student_id !== user.id) redirect(`/gigs/${id}`);
+  if (!job) notFound();
+  if (job.employer_id !== user.id) redirect(`/jobs/${id}`);
 
   return (
     <div className="py-10 space-y-6">
-      <h1 className="text-2xl font-bold">Edit gig</h1>
-      <GigForm
-        action={updateGig.bind(null, id)}
-        gig={gig}
+      <h1 className="text-2xl font-bold">Edit job</h1>
+      <JobForm
+        action={updateJob.bind(null, id)}
+        job={job}
         submitLabel="Save changes"
         error={error}
       />

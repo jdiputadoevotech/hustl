@@ -19,7 +19,7 @@ export function CategoryFilter({ selected }: { selected?: string }) {
     const next = new URLSearchParams(params.toString());
     if (category) next.set("category", category);
     else next.delete("category");
-    router.push(`/gigs?${next.toString()}`);
+    router.push(`/jobs?${next.toString()}`);
   };
 
   return (

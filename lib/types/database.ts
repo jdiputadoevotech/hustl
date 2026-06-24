@@ -1,23 +1,30 @@
 /**
- * Shared database entity types for Hustl.
+ * Shared database entity types for Hustl (student job board).
  *
- * These hand-written interfaces mirror the Postgres schema documented in
- * SETUP.md (tables: profiles, gigs, orders). Import them across pages and
- * server actions instead of redeclaring shapes, e.g.:
+ * These hand-written interfaces mirror the Postgres schema in SETUP.md
+ * (profiles, jobs, contracts, reviews). Import them across pages and server
+ * actions instead of redeclaring shapes, e.g.:
  *
- *   import type { Gig, OrderStatus } from "@/lib/types/database";
- *
- * If the schema later grows, regenerate with the Supabase CLI
- * (`supabase gen types typescript`) and reconcile against these.
+ *   import type { Job, ContractStatus } from "@/lib/types/database";
  */
 
-/** Lifecycle state of an order. Matches the CHECK constraint on orders.status. */
-export type OrderStatus = "Pending" | "In Progress" | "Completed" | "Cancelled";
+/** Kind of posting. Drives which pay fields apply. */
+export type JobType = "gig" | "part-time" | "full-time";
+
+/** Pay cadence. 'project' is for gigs; the rest are salary rates. */
+export type PayPeriod = "project" | "hourly" | "weekly" | "monthly";
+
+/** Lifecycle of a hiring contract. Matches the CHECK on contracts.status. */
+export type ContractStatus =
+  | "Offered"
+  | "Accepted"
+  | "Declined"
+  | "Completed"
+  | "Resigned";
 
 /**
  * A user profile. Row id matches auth.users.id (1:1 with Supabase Auth).
- * `is_seller` is set from the email domain (@usc.edu.ph) at signup by the
- * handle_new_user trigger; only sellers may post gigs.
+ * Anyone can act as an employer or a student — there is no role column.
  */
 export interface Profile {
   id: string; // uuid, FK -> auth.users.id
@@ -25,62 +32,58 @@ export interface Profile {
   messenger_username: string | null; // used for m.me/<username> handoff
   bio: string | null;
   skills: string[] | null;
-  is_seller: boolean;
-  created_at: string; // timestamptz (ISO string)
-  updated_at: string; // timestamptz (ISO string)
+  created_at: string; // timestamptz
+  updated_at: string; // timestamptz
 }
 
-/**
- * A service listing posted by a student seller.
- * `image_url` references an object in the `gig-images` Storage bucket.
- */
-export interface Gig {
+/** A job posting created by an employer (any authenticated user). */
+export interface Job {
   id: string; // uuid
-  student_id: string; // uuid, FK -> profiles.id
+  employer_id: string; // uuid, FK -> profiles.id
   title: string;
   description: string | null;
-  price: number; // numeric (PHP)
+  job_type: JobType;
   category: string | null;
-  image_url: string | null; // public URL / path into gig-images bucket
+  pay_min: number | null;
+  pay_max: number | null;
+  pay_period: PayPeriod;
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }
 
 /**
- * A transaction record. The freelancer (seller) creates these after a buyer
- * contacts them on Messenger, identifying the buyer by email. Funds are handled
- * off-platform (P2P); only the status is tracked here.
+ * Row shape of the `jobs_with_employer` view: every job column plus the
+ * employer's name and aggregate rating. Read by the browse grid + profiles.
  */
-export interface Order {
+export interface JobWithEmployer extends Job {
+  employer_name: string | null;
+  employer_rating_avg: number; // 0 when no reviews
+  employer_rating_count: number;
+}
+
+/** The hiring relationship between an employer, a job, and a hired student. */
+export interface Contract {
   id: string; // uuid
-  gig_id: string; // uuid, FK -> gigs.id
-  client_id: string | null; // uuid, FK -> profiles.id; null for email-only buyers
-  client_email: string | null; // buyer email supplied by the freelancer
-  status: OrderStatus;
+  job_id: string; // uuid, FK -> jobs.id
+  employer_id: string; // uuid, FK -> profiles.id (job poster)
+  student_id: string; // uuid, FK -> profiles.id (hired student)
+  status: ContractStatus;
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }
 
 /**
- * A 1–5 star review left by a buyer on a gig. One per (gig, reviewer);
- * eligibility (must have ordered the gig) is enforced by RLS. See SETUP.md.
+ * A 1–5 star review left by a student for an employer after a contract
+ * Completes. One per contract; eligibility enforced by RLS. See SETUP.md.
  */
 export interface Review {
   id: string; // uuid
-  gig_id: string; // uuid, FK -> gigs.id
-  reviewer_id: string; // uuid, FK -> profiles.id
+  contract_id: string; // uuid, FK -> contracts.id
+  employer_id: string; // uuid, FK -> profiles.id (reviewee)
+  reviewer_id: string; // uuid, FK -> profiles.id (the student)
+  job_id: string; // uuid, FK -> jobs.id
   rating: number; // 1..5
   comment: string | null;
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
-}
-
-/**
- * Row shape of the `gigs_with_ratings` view: every gig column plus the seller's
- * name and aggregated rating. Used by the browse grid and profile gig lists.
- */
-export interface GigWithRating extends Gig {
-  seller_name: string | null;
-  rating_avg: number; // 0 when no reviews
-  rating_count: number;
 }

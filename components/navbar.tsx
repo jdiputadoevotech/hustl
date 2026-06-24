@@ -35,7 +35,7 @@ export async function Navbar() {
 
         {/* Search */}
         <form
-          action="/gigs"
+          action="/jobs"
           method="get"
           className="flex-1 max-w-3xl flex"
           role="search"
@@ -43,8 +43,8 @@ export async function Navbar() {
           <input
             name="q"
             type="search"
-            placeholder="What service are you looking for today?"
-            aria-label="Search gigs"
+            placeholder="Search for jobs, gigs, and roles"
+            aria-label="Search jobs"
             className="h-12 w-full rounded-l-md border border-r-0 border-input bg-transparent px-5 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <button
@@ -66,7 +66,7 @@ export async function Navbar() {
                 href="/dashboard"
                 className="hidden sm:inline text-base font-medium text-foreground/80 hover:text-foreground"
               >
-                Orders
+                Dashboard
               </Link>
               <UserMenu userId={user.id} name={displayName} />
             </>

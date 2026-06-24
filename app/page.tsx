@@ -8,19 +8,19 @@ export default function Home() {
         For University of San Carlos students
       </span>
       <h1 className="text-4xl sm:text-5xl font-bold tracking-tight max-w-2xl">
-        Get it done by a fellow Carolinian.
+        The campus job board for Carolinians.
       </h1>
       <p className="text-muted-foreground max-w-xl text-lg">
-        Hustl is the campus gig marketplace. Hire USC students for design,
-        coding, tutoring, and more — or post your own services and start earning.
-        Chat happens on Messenger; payment is settled peer-to-peer.
+        Hustl connects USC students with gigs and part- or full-time work. Browse
+        openings, message employers, and get hired — chatting happens on
+        Messenger, hiring is tracked here.
       </p>
       <div className="flex gap-3">
         <Button asChild size="lg">
-          <Link href="/gigs">Browse gigs</Link>
+          <Link href="/jobs">Browse jobs</Link>
         </Button>
         <Button asChild size="lg" variant="outline">
-          <Link href="/gigs/new">Post a gig</Link>
+          <Link href="/jobs/new">Post a job</Link>
         </Button>
       </div>
     </div>

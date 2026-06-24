@@ -52,7 +52,7 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic =
     pathname === "/" ||
-    pathname.startsWith("/gigs") ||
+    pathname.startsWith("/jobs") ||
     pathname.startsWith("/profile") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth");

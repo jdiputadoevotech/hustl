@@ -1,8 +1,9 @@
 # Hustl — Local Setup Guide
 
-Get Hustl running on your machine. Hustl is a USC student gig marketplace built
-on **Next.js (App Router) + Supabase + Tailwind**. This guide assumes no prior
-Supabase experience.
+Get Hustl running on your machine. Hustl is a USC **student job board** built on
+**Next.js (App Router) + Supabase + Tailwind**. Employers post jobs (gig,
+part-time, full-time); students browse, contact employers on Messenger, and get
+hired through a contract workflow. This guide assumes no prior Supabase experience.
 
 ## Prerequisites
 
@@ -58,137 +59,242 @@ There is a `.env.example` in the repo you can copy from.
 
 ---
 
-## 4. Set up the database schema (SQL Editor)
+## 4. Database schema — Fresh Migration (SQL Editor)
 
-Open **Supabase → SQL Editor → New query**, paste the entire block below, and
-click **Run**. It creates the three tables, enables Row Level Security, defines
-the access policies, and adds a trigger that auto-creates a profile on signup.
+This is the **single, all-in-one** schema script for the job-board model. It
+safely **drops the old marketplace tables** (`gigs`, `orders`, old `reviews`) and
+recreates everything fresh: `jobs`, `contracts`, `reviews`, all RLS policies, the
+signup trigger, and the `jobs_with_employer` view.
+
+> **Your auth users are NOT touched.** The script never drops `auth.users`, and it
+> preserves the `profiles` table (it only drops a now-unused column). Existing
+> logins keep working — you're only resetting the app tables.
+
+**How to run the Fresh Migration:**
+1. Open **Supabase → SQL Editor → New query**.
+2. Paste the **entire** block below.
+3. Click **Run**. It's idempotent — safe to re-run.
 
 ```sql
 -- ============================================================
--- HUSTL SCHEMA
+-- HUSTL — JOB BOARD SCHEMA (fresh migration)
 -- ============================================================
 
--- ---------- PROFILES ----------
--- One row per auth user. id matches auth.users.id.
-create table public.profiles (
+-- 1. Drop old views + tables (CASCADE removes dependent objects/policies).
+drop view  if exists public.gigs_with_ratings;
+drop view  if exists public.jobs_with_employer;
+drop table if exists public.reviews   cascade;
+drop table if exists public.orders    cascade;
+drop table if exists public.gigs      cascade;
+drop table if exists public.contracts cascade;
+drop table if exists public.jobs      cascade;
+
+-- ============================================================
+-- PROFILES (preserved — one row per auth user; id = auth.users.id)
+-- ============================================================
+create table if not exists public.profiles (
   id                 uuid primary key references auth.users (id) on delete cascade,
   full_name          text,
   messenger_username text,            -- powers m.me/<username> contact handoff
   bio                text,
   skills             text[],
-  is_seller          boolean not null default false,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
+-- Drop the old marketplace-only column if it still exists.
+alter table public.profiles drop column if exists is_seller;
 
--- ---------- GIGS ----------
--- A service listing owned by a student seller.
-create table public.gigs (
+-- ============================================================
+-- JOBS — a posting by any authenticated user (the "employer")
+-- ============================================================
+create table public.jobs (
   id          uuid primary key default gen_random_uuid(),
-  student_id  uuid not null references public.profiles (id) on delete cascade,
+  employer_id uuid not null references public.profiles (id) on delete cascade,
   title       text not null,
   description text,
-  price       numeric(10,2) not null default 0,
+  job_type    text not null check (job_type in ('gig','part-time','full-time')),
   category    text,
-  image_url   text,                   -- object in the gig-images Storage bucket
+  -- Flexible pay: a min–max range plus a period.
+  --   gig        -> pay_period = 'project' (fixed project budget range)
+  --   part/full  -> pay_period in ('hourly','weekly','monthly') (salary rate range)
+  pay_min     numeric(10,2),
+  pay_max     numeric(10,2),
+  pay_period  text not null default 'project'
+              check (pay_period in ('project','hourly','weekly','monthly')),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
 
--- ---------- ORDERS ----------
--- A transaction record. The freelancer (seller) creates orders after a buyer
--- contacts them on Messenger, identifying the buyer by email. App tracks status
--- only; payment is P2P off-platform.
-create table public.orders (
-  id           uuid primary key default gen_random_uuid(),
-  gig_id       uuid not null references public.gigs (id) on delete cascade,
-  client_id    uuid references public.profiles (id) on delete cascade, -- nullable: email-only buyers
-  client_email text,                                                   -- buyer email entered by the seller
-  status       text not null default 'Pending'
-               check (status in ('Pending','In Progress','Completed','Cancelled')),
-  created_at   timestamptz not null default now(),
-  updated_at   timestamptz not null default now()
+-- ============================================================
+-- CONTRACTS — the hiring lifecycle between employer + student for a job
+--   Offered -> Accepted (student) | Declined (student)
+--   Accepted -> Completed (employer) | Resigned (either party)
+-- ============================================================
+create table public.contracts (
+  id          uuid primary key default gen_random_uuid(),
+  job_id      uuid not null references public.jobs (id) on delete cascade,
+  employer_id uuid not null references public.profiles (id) on delete cascade,
+  student_id  uuid not null references public.profiles (id) on delete cascade,
+  status      text not null default 'Offered'
+              check (status in ('Offered','Accepted','Declined','Completed','Resigned')),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  unique (job_id, student_id)   -- one offer per student per job
+);
+
+-- ============================================================
+-- REVIEWS — a student rates the EMPLOYER after a contract Completes
+-- ============================================================
+create table public.reviews (
+  id          uuid primary key default gen_random_uuid(),
+  contract_id uuid not null references public.contracts (id) on delete cascade,
+  employer_id uuid not null references public.profiles (id) on delete cascade, -- reviewee
+  reviewer_id uuid not null references public.profiles (id) on delete cascade, -- the student
+  job_id      uuid not null references public.jobs (id) on delete cascade,
+  rating      int  not null check (rating between 1 and 5),
+  comment     text,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  unique (contract_id)          -- one review per completed contract
 );
 
 -- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
-alter table public.profiles enable row level security;
-alter table public.gigs     enable row level security;
-alter table public.orders   enable row level security;
+alter table public.profiles  enable row level security;
+alter table public.jobs      enable row level security;
+alter table public.contracts enable row level security;
+alter table public.reviews   enable row level security;
 
--- ---------- PROFILES policies ----------
--- Public portfolios are readable by anyone.
+-- ---------- PROFILES ----------
+drop policy if exists "Profiles are viewable by everyone" on public.profiles;
 create policy "Profiles are viewable by everyone"
-  on public.profiles for select
-  using (true);
+  on public.profiles for select using (true);
 
--- A user can update only their own profile.
+drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile"
   on public.profiles for update
-  using (auth.uid() = id)
-  with check (auth.uid() = id);
+  using (auth.uid() = id) with check (auth.uid() = id);
 
--- A user can delete only their own profile (account deletion).
+drop policy if exists "Users can delete their own profile" on public.profiles;
 create policy "Users can delete their own profile"
-  on public.profiles for delete
-  using (auth.uid() = id);
+  on public.profiles for delete using (auth.uid() = id);
 
--- ---------- GIGS policies ----------
--- Anyone can browse the marketplace.
-create policy "Gigs are viewable by everyone"
-  on public.gigs for select
-  using (true);
+-- ---------- JOBS ----------
+drop policy if exists "Jobs are viewable by everyone" on public.jobs;
+create policy "Jobs are viewable by everyone"
+  on public.jobs for select using (true);
 
--- Only verified Carolinians (@usc.edu.ph) may post gigs, and only as themselves.
-create policy "Allow gig creation only for Carolinians"
-  on public.gigs for insert
+-- Any authenticated user may post a job, as themselves.
+drop policy if exists "Users can post jobs" on public.jobs;
+create policy "Users can post jobs"
+  on public.jobs for insert with check (employer_id = auth.uid());
+
+drop policy if exists "Employers can update their own jobs" on public.jobs;
+create policy "Employers can update their own jobs"
+  on public.jobs for update
+  using (auth.uid() = employer_id) with check (auth.uid() = employer_id);
+
+drop policy if exists "Employers can delete their own jobs" on public.jobs;
+create policy "Employers can delete their own jobs"
+  on public.jobs for delete using (auth.uid() = employer_id);
+
+-- ---------- CONTRACTS ----------
+-- Visible to the two parties only.
+drop policy if exists "Contracts visible to the parties" on public.contracts;
+create policy "Contracts visible to the parties"
+  on public.contracts for select
+  using (auth.uid() = employer_id or auth.uid() = student_id);
+
+-- Only the job's employer creates an offer, as themselves, in 'Offered' state.
+drop policy if exists "Employers can offer contracts" on public.contracts;
+create policy "Employers can offer contracts"
+  on public.contracts for insert
   with check (
-    auth.jwt() ->> 'email' like '%@usc.edu.ph'
-    and student_id = auth.uid()
+    employer_id = auth.uid()
+    and status = 'Offered'
+    and employer_id = (select j.employer_id from public.jobs j where j.id = job_id)
   );
 
--- A seller can edit only their own gigs.
-create policy "Sellers can update their own gigs"
-  on public.gigs for update
-  using (auth.uid() = student_id)
-  with check (auth.uid() = student_id);
+-- Either party may update the row; the legal transition is enforced in the app.
+drop policy if exists "Parties can update a contract" on public.contracts;
+create policy "Parties can update a contract"
+  on public.contracts for update
+  using (auth.uid() = employer_id or auth.uid() = student_id)
+  with check (auth.uid() = employer_id or auth.uid() = student_id);
 
--- A seller can delete only their own gigs.
-create policy "Sellers can delete their own gigs"
-  on public.gigs for delete
-  using (auth.uid() = student_id);
+-- ---------- REVIEWS ----------
+drop policy if exists "Reviews are viewable by everyone" on public.reviews;
+create policy "Reviews are viewable by everyone"
+  on public.reviews for select using (true);
 
--- ---------- ORDERS policies ----------
--- Readable by the client who placed it and by the seller who owns the gig.
-create policy "Orders visible to client and gig owner"
-  on public.orders for select
-  using (
-    auth.uid() = client_id
-    or auth.uid() = (select student_id from public.gigs where gigs.id = orders.gig_id)
-  );
-
--- The seller who owns the gig creates orders (identifying the buyer by email).
-create policy "Sellers can create orders on their gigs"
-  on public.orders for insert
+-- The student may review the employer only for a Completed contract of theirs.
+drop policy if exists "Students can review completed employers" on public.reviews;
+create policy "Students can review completed employers"
+  on public.reviews for insert
   with check (
-    auth.uid() = (select student_id from public.gigs where gigs.id = orders.gig_id)
+    reviewer_id = auth.uid()
+    and exists (
+      select 1 from public.contracts c
+      where c.id = contract_id
+        and c.student_id = auth.uid()
+        and c.employer_id = reviews.employer_id
+        and c.status = 'Completed'
+    )
   );
 
--- Only the seller who owns the gig can advance the order status.
-create policy "Sellers can update orders on their gigs"
-  on public.orders for update
-  using (
-    auth.uid() = (select student_id from public.gigs where gigs.id = orders.gig_id)
+drop policy if exists "Reviewers can update their own review" on public.reviews;
+create policy "Reviewers can update their own review"
+  on public.reviews for update
+  using (reviewer_id = auth.uid()) with check (reviewer_id = auth.uid());
+
+drop policy if exists "Reviewers can delete their own review" on public.reviews;
+create policy "Reviewers can delete their own review"
+  on public.reviews for delete using (reviewer_id = auth.uid());
+
+-- ============================================================
+-- AUTO-CREATE PROFILE ON SIGNUP
+-- Default display name = signup full_name, else the email local-part.
+-- ============================================================
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, full_name)
+  values (
+    new.id,
+    coalesce(
+      nullif(new.raw_user_meta_data ->> 'full_name', ''),
+      split_part(new.email, '@', 1)
+    )
   )
-  with check (
-    auth.uid() = (select student_id from public.gigs where gigs.id = orders.gig_id)
-  );
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
 
--- Helper: resolve a buyer's email to their user id so a seller can only create
--- an order for a registered Hustl account (returns null when none exists).
--- SECURITY DEFINER lets it read auth.users; only signed-in users may call it.
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- Backfill: ensure existing auth users have a profile + a display name.
+insert into public.profiles (id, full_name)
+select u.id, split_part(u.email, '@', 1)
+from auth.users u
+where not exists (select 1 from public.profiles p where p.id = u.id);
+
+update public.profiles p
+set full_name = split_part(u.email, '@', 1)
+from auth.users u
+where p.id = u.id and (p.full_name is null or p.full_name = '');
+
+-- ============================================================
+-- HELPER: resolve a student's email to their user id (for sending offers).
+-- SECURITY DEFINER reads auth.users; only signed-in users may call it.
+-- ============================================================
 create or replace function public.lookup_user_by_email(p_email text)
 returns uuid
 language sql
@@ -202,156 +308,34 @@ revoke all on function public.lookup_user_by_email(text) from public, anon;
 grant execute on function public.lookup_user_by_email(text) to authenticated;
 
 -- ============================================================
--- AUTO-CREATE PROFILE ON SIGNUP
--- Sets is_seller = true when the email is @usc.edu.ph.
+-- VIEW: each job + employer name + employer's aggregate rating.
+-- Read by the browse grid and profile job lists. Inherits table RLS.
 -- ============================================================
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer set search_path = public
-as $$
-begin
-  insert into public.profiles (id, full_name, is_seller)
-  values (
-    new.id,
-    -- Default display name: the signup full_name if given, otherwise the
-    -- part of the email before the "@" (e.g. juan.delacruz@usc.edu.ph -> juan.delacruz).
-    coalesce(
-      nullif(new.raw_user_meta_data ->> 'full_name', ''),
-      split_part(new.email, '@', 1)
-    ),
-    (new.email like '%@usc.edu.ph')
-  );
-  return new;
-end;
-$$;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
-
--- Backfill: give existing accounts that have no name the email local-part.
--- (The trigger above only runs for new signups.)
-update public.profiles p
-set full_name = split_part(u.email, '@', 1)
-from auth.users u
-where p.id = u.id
-  and (p.full_name is null or p.full_name = '');
-```
-
-### Reviews & ratings
-
-Run this block too — it adds the `reviews` table, its RLS policies, and a
-`gigs_with_ratings` view used by the marketplace cards to show the average
-star rating without loading every review.
-
-```sql
--- ---------- REVIEWS ----------
--- One 1-5 star review per (gig, reviewer). Only buyers who ordered the gig
--- may insert (enforced below). Reviewers can edit/delete their own.
-create table public.reviews (
-  id          uuid primary key default gen_random_uuid(),
-  gig_id      uuid not null references public.gigs (id) on delete cascade,
-  reviewer_id uuid not null references public.profiles (id) on delete cascade,
-  rating      int  not null check (rating between 1 and 5),
-  comment     text,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now(),
-  unique (gig_id, reviewer_id)
-);
-
-alter table public.reviews enable row level security;
-
--- Anyone can read reviews.
-create policy "Reviews are viewable by everyone"
-  on public.reviews for select
-  using (true);
-
--- Any logged-in user may review, as themselves, except on their own gig.
-create policy "Logged-in users can review"
-  on public.reviews for insert
-  with check (
-    reviewer_id = auth.uid()
-    and auth.uid() <> (
-      select g.student_id from public.gigs g where g.id = reviews.gig_id
-    )
-  );
-
--- Reviewers can edit their own review.
-create policy "Reviewers can update their own review"
-  on public.reviews for update
-  using (reviewer_id = auth.uid())
-  with check (reviewer_id = auth.uid());
-
--- Reviewers can delete their own review.
-create policy "Reviewers can delete their own review"
-  on public.reviews for delete
-  using (reviewer_id = auth.uid());
-
--- ---------- RATINGS VIEW ----------
--- Each gig + seller name + aggregated rating. Read by the browse grid and
--- profile gig lists. Inherits the underlying tables' RLS (reviews/gigs are
--- publicly readable), so no extra policy is required.
-create or replace view public.gigs_with_ratings as
+create or replace view public.jobs_with_employer as
 select
-  g.*,
-  p.full_name as seller_name,
-  coalesce(round(avg(r.rating), 1), 0)::numeric(2, 1) as rating_avg,
-  count(r.id) as rating_count
-from public.gigs g
-left join public.profiles p on p.id = g.student_id
-left join public.reviews  r on r.gig_id = g.id
-group by g.id, p.full_name;
+  j.*,
+  p.full_name as employer_name,
+  coalesce(round(avg(r.rating), 1), 0)::numeric(2, 1) as employer_rating_avg,
+  count(r.id) as employer_rating_count
+from public.jobs j
+left join public.profiles p on p.id = j.employer_id
+left join public.reviews  r on r.employer_id = j.employer_id
+group by j.id, p.full_name;
 ```
+
+That's the whole schema — there is no separate Storage step (jobs have no images).
 
 ---
 
-## 5. Set up Storage for gig images
-
-Gig images are uploaded to a Supabase **Storage** bucket.
-
-1. **Supabase → Storage → New bucket.** Name it `gig-images`. Toggle
-   **Public bucket** ON (so images render without signed URLs). Create.
-2. Open **SQL Editor** and run the policies below so the public can view images
-   and only verified Carolinians can upload/manage them:
-
-```sql
--- Public read of gig images.
-create policy "Public read of gig images"
-  on storage.objects for select
-  using (bucket_id = 'gig-images');
-
--- Only @usc.edu.ph sellers may upload.
-create policy "Carolinians can upload gig images"
-  on storage.objects for insert
-  with check (
-    bucket_id = 'gig-images'
-    and auth.jwt() ->> 'email' like '%@usc.edu.ph'
-  );
-
--- Sellers may update/replace their own uploaded objects.
-create policy "Owners can update gig images"
-  on storage.objects for update
-  using (bucket_id = 'gig-images' and owner = auth.uid());
-
--- Sellers may delete their own uploaded objects.
-create policy "Owners can delete gig images"
-  on storage.objects for delete
-  using (bucket_id = 'gig-images' and owner = auth.uid());
-```
-
----
-
-## 6. Run the app
+## 5. Run the app
 
 ```bash
 npm run dev
 ```
 
-Open http://localhost:3000. Use **Sign up** to create an account:
-- Sign up with an `@usc.edu.ph` email to act as a **seller** (can post gigs).
-- Sign up with any other email (e.g. `@gmail.com`) to act as a **client**
-  (browse, message, place orders).
+Open http://localhost:3000. Use **Sign up** to create an account — **any email
+works** (no domain restriction). Every user can both post jobs (as an employer)
+and get hired (as a student).
 
 > First run with placeholder/empty Supabase keys will still render the UI, but
 > auth and data calls fail until Steps 2–4 are complete.
@@ -362,17 +346,19 @@ Open http://localhost:3000. Use **Sign up** to create an account:
 
 ```
 app/
-  auth/            template auth flow (login, sign-up, reset)
-  protected/       example gated page
-  gigs/            marketplace listings        (planned — see README)
-  dashboard/       order management            (planned — see README)
-  profile/         public portfolios + edit    (planned — see README)
+  auth/         template auth flow (login, sign-up, reset)
+  jobs/         job board: browse, detail, post, edit
+  contracts/    server actions for the hiring lifecycle
+  dashboard/    employer + student hiring views
+  profile/      public profiles + edit
 components/
-  ui/              shadcn primitives (from template)
-  marketplace/     shared gig UI               (planned — see README)
+  ui/           shadcn primitives (from template)
+  marketplace/  shared job UI (cards, badges, filters, reviews)
 lib/
-  supabase/        client.ts / server.ts / proxy.ts (do not duplicate)
-  types/           database.ts — shared Profile/Gig/Order types
+  supabase/     client.ts / server.ts / proxy.ts (do not duplicate)
+  types/        database.ts — shared Profile/Job/Contract/Review types
+  pay.ts        formatPay() helper
+  categories.ts job categories
 ```
 
 See `DEPLOYMENT.md` to ship to production on Vercel.

@@ -11,7 +11,7 @@ import {
 
 export const SORT_OPTIONS = [
   { value: "newest", label: "Newest" },
-  { value: "reviews", label: "Most Reviews" },
+  { value: "pay", label: "Highest pay" },
 ] as const;
 
 export type SortValue = (typeof SORT_OPTIONS)[number]["value"];
@@ -27,7 +27,7 @@ export function SortDropdown({ selected }: { selected: SortValue }) {
   const go = (value: string) => {
     const next = new URLSearchParams(params.toString());
     next.set("sort", value);
-    router.push(`/gigs?${next.toString()}`);
+    router.push(`/jobs?${next.toString()}`);
   };
 
   return (

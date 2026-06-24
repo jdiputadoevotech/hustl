@@ -37,7 +37,7 @@ export async function updateProfile(formData: FormData) {
 }
 
 /**
- * Deletes the user's profile row (cascading to their gigs/orders) and signs
+ * Deletes the user's profile row (cascading to their jobs/contracts) and signs
  * them out. Note: removing the underlying auth.users record requires the
  * service-role key and is out of scope for this client-key build.
  */
