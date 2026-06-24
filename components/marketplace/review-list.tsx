@@ -13,7 +13,7 @@ export function ReviewList({ reviews }: { reviews: ReviewItem[] }) {
   if (reviews.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No reviews yet. Buyers who order this gig can leave the first one.
+        No reviews yet. Reviews appear here after a completed contract.
       </p>
     );
   }

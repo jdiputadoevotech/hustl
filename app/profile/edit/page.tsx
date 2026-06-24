@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
@@ -5,6 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/marketplace/submit-button";
+import { ConfirmSubmit } from "@/components/marketplace/confirm-submit";
+import { FormError } from "@/components/marketplace/form-error";
 import { updateProfile, deleteAccount } from "../actions";
 
 export const metadata = { title: "Edit profile — Hustl" };
@@ -28,15 +32,20 @@ export default async function EditProfilePage({
     .single();
 
   return (
-    <div className="py-10 space-y-6 max-w-xl">
-      <h1 className="text-2xl font-bold">Edit profile</h1>
+    <div className="max-w-xl space-y-6 py-10">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold">Edit profile</h1>
+        <p className="text-muted-foreground">
+          This is what students and employers see when they view your profile.
+        </p>
+      </header>
 
-      <form action={updateProfile} className="space-y-5">
-        {error && (
-          <p className="text-sm text-destructive border border-destructive/40 rounded-md p-3">
-            {error}
-          </p>
-        )}
+      <form
+        action={updateProfile}
+        className="space-y-5"
+        aria-describedby={error ? "profile-form-error" : undefined}
+      >
+        {error && <FormError id="profile-form-error">{error}</FormError>}
 
         <div className="space-y-2">
           <Label htmlFor="full_name">Full name</Label>
@@ -56,8 +65,8 @@ export default async function EditProfilePage({
             defaultValue={profile?.messenger_username ?? ""}
           />
           <p className="text-xs text-muted-foreground">
-            Your Messenger handle from facebook.com/&lt;username&gt;. Buyers use
-            this to contact you after an inquiry.
+            Your Messenger handle from facebook.com/&lt;username&gt;. People use
+            this to reach you after they message you about a job.
           </p>
         </div>
 
@@ -81,21 +90,30 @@ export default async function EditProfilePage({
           />
         </div>
 
-        <Button type="submit">Save profile</Button>
+        <div className="flex items-center gap-3 pt-1">
+          <SubmitButton>Save profile</SubmitButton>
+          <Button asChild variant="ghost">
+            <Link href={`/profile/${user.id}`}>Cancel</Link>
+          </Button>
+        </div>
       </form>
 
       <hr className="border-border" />
 
-      <form action={deleteAccount} className="space-y-2">
+      <div className="space-y-2">
         <h2 className="text-sm font-semibold text-destructive">Danger zone</h2>
         <p className="text-xs text-muted-foreground">
           Deletes your profile and all your jobs and contracts. This cannot be
           undone.
         </p>
-        <Button type="submit" variant="destructive" size="sm">
-          Delete account
-        </Button>
-      </form>
+        <ConfirmSubmit
+          action={deleteAccount}
+          label="Delete account"
+          confirmTitle="Delete your account?"
+          confirmBody="This permanently deletes your profile and all your jobs and contracts. This cannot be undone."
+          size="sm"
+        />
+      </div>
     </div>
   );
 }

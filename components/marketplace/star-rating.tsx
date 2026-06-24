@@ -29,7 +29,10 @@ export function StarRating({
     }
     return (
       <span className={cn("flex items-center gap-1 text-sm", className)}>
-        <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+        <Star
+          className="h-3.5 w-3.5 fill-amber-500 text-amber-500"
+          aria-hidden
+        />
         <span className="font-semibold">{average.toFixed(1)}</span>
         <span className="text-muted-foreground">({count})</span>
       </span>
@@ -37,23 +40,29 @@ export function StarRating({
   }
 
   const rounded = Math.round(average);
+  const ratingLabel =
+    count > 0 ? `Rated ${average.toFixed(1)} out of 5` : "No reviews yet";
   return (
-    <span className={cn("flex items-center gap-2", className)}>
-      <span className="flex">
+    <span
+      className={cn("flex items-center gap-2", className)}
+      role="img"
+      aria-label={ratingLabel}
+    >
+      <span className="flex" aria-hidden>
         {[1, 2, 3, 4, 5].map((i) => (
           <Star
             key={i}
             className={cn(
               "h-5 w-5",
               i <= rounded
-                ? "fill-amber-400 text-amber-400"
+                ? "fill-amber-500 text-amber-500"
                 : "text-muted-foreground/40",
             )}
           />
         ))}
       </span>
       {!starsOnly && (
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-muted-foreground" aria-hidden>
           {count > 0 ? `${average.toFixed(1)} (${count})` : "No reviews yet"}
         </span>
       )}

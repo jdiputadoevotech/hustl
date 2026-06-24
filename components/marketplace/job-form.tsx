@@ -1,10 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/marketplace/submit-button";
+import { FormError } from "@/components/marketplace/form-error";
 import { GIG_CATEGORIES } from "@/lib/categories";
 import { JOB_TYPE_LABEL } from "@/components/marketplace/job-type-badge";
 import type { Job, JobType, PayPeriod, WorkMode } from "@/lib/types/database";
@@ -29,6 +33,8 @@ interface JobFormProps {
   >;
   submitLabel: string;
   error?: string;
+  /** When set, renders a Cancel link back to this href beside the submit. */
+  cancelHref?: string;
 }
 
 const TYPES: JobType[] = ["gig", "part-time", "full-time"];
@@ -36,7 +42,13 @@ const SALARY_PERIODS: PayPeriod[] = ["hourly", "weekly", "monthly"];
 const WORK_MODES: WorkMode[] = ["on-site", "remote", "hybrid"];
 
 /** Create/edit a job. Pay fields adapt to the selected job type. */
-export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
+export function JobForm({
+  action,
+  job,
+  submitLabel,
+  error,
+  cancelHref,
+}: JobFormProps) {
   const [type, setType] = useState<JobType>(job?.job_type ?? "gig");
   const isGig = type === "gig";
 
@@ -46,11 +58,7 @@ export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
 
   return (
     <form action={action} className="space-y-5 max-w-xl">
-      {error && (
-        <p className="text-sm text-destructive border border-destructive/40 rounded-md p-3">
-          {error}
-        </p>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       <div className="space-y-2">
         <Label htmlFor="title">Title</Label>
@@ -81,47 +89,40 @@ export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="job_type">Job type</Label>
-          <select
+          <Select
             id="job_type"
             name="job_type"
             value={type}
             onChange={(e) => setType(e.target.value as JobType)}
-            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
           >
             {TYPES.map((t) => (
               <option key={t} value={t}>
                 {JOB_TYPE_LABEL[t]}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="category">Category</Label>
-          <select
-            id="category"
-            name="category"
-            defaultValue={job?.category ?? ""}
-            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-          >
+          <Select id="category" name="category" defaultValue={job?.category ?? ""}>
             <option value="">Select a category</option>
             {GIG_CATEGORIES.map((c) => (
               <option key={c.name} value={c.name}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="work_mode">Work mode</Label>
-          <select
+          <Select
             id="work_mode"
             name="work_mode"
             defaultValue={job?.work_mode ?? ""}
-            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
           >
             <option value="">Not specified</option>
             {WORK_MODES.map((m) => (
@@ -129,7 +130,7 @@ export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
                 {m}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-2">
@@ -201,17 +202,17 @@ export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
           ) : (
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground">Per</span>
-              <select
+              <Select
                 name="pay_period"
                 defaultValue={initialPeriod}
-                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                containerClassName="w-fit"
               >
                 {SALARY_PERIODS.map((p) => (
                   <option key={p} value={p}>
                     {p}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
         </div>
@@ -234,14 +235,21 @@ export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
           name="is_urgent"
           type="checkbox"
           defaultChecked={job?.is_urgent ?? false}
-          className="h-4 w-4 rounded border-input accent-red-600"
+          className="h-4 w-4 cursor-pointer rounded border-input accent-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
         <Label htmlFor="is_urgent" className="font-normal">
           Mark this job as urgent
         </Label>
       </div>
 
-      <Button type="submit">{submitLabel}</Button>
+      <div className="flex items-center gap-3 pt-1">
+        <SubmitButton>{submitLabel}</SubmitButton>
+        {cancelHref && (
+          <Button asChild variant="ghost">
+            <Link href={cancelHref}>Cancel</Link>
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

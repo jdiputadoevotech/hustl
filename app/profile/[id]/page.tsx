@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { MessageCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { JobCard } from "@/components/marketplace/job-card";
 import { StarRating } from "@/components/marketplace/star-rating";
 import {
@@ -17,13 +19,14 @@ export default async function ProfilePage({ params }: { params: Params }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("id, full_name, bio, skills, messenger_username")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
-  if (!profile) notFound();
+  if (profileError) throw profileError; // real failure → error boundary, not a fake 404
+  if (!profile) notFound(); // genuinely missing → 404
 
   // Jobs this user has posted (as an employer).
   const { data: jobs } = await supabase
@@ -59,43 +62,64 @@ export default async function ProfilePage({ params }: { params: Params }) {
 
   return (
     <div className="py-8 space-y-10">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="space-y-3">
-          <h1 className="text-2xl font-bold">
-            {profile.full_name ?? "Hustler"}
-          </h1>
-          <StarRating average={rAvg} count={rCount} />
-          {profile.bio && (
-            <p className="text-muted-foreground max-w-2xl whitespace-pre-wrap">
-              {profile.bio}
-            </p>
-          )}
-          {profile.skills && profile.skills.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
-              {profile.skills.map((s: string) => (
-                <Badge key={s} variant="outline">
-                  {s}
-                </Badge>
-              ))}
+      <header className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex gap-4 sm:gap-5 min-w-0">
+          <AvatarInitials
+            name={profile.full_name}
+            className="h-16 w-16 sm:h-20 sm:w-20 text-xl sm:text-2xl"
+          />
+          <div className="space-y-3 min-w-0">
+            <div className="space-y-1.5">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                {profile.full_name ?? "Carolinian"}
+              </h1>
+              <StarRating average={rAvg} count={rCount} />
             </div>
-          )}
-          {profile.messenger_username && (
+            {profile.bio && (
+              <p className="text-muted-foreground max-w-2xl whitespace-pre-wrap">
+                {profile.bio}
+              </p>
+            )}
+            {profile.skills && profile.skills.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {profile.skills.map((s: string) => (
+                  <Badge key={s} variant="outline">
+                    {s}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Contextual primary action: visitors message, owner edits. */}
+        {isOwner ? (
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="shrink-0 self-start"
+          >
+            <Link href="/profile/edit">Edit profile</Link>
+          </Button>
+        ) : profile.messenger_username ? (
+          <Button
+            asChild
+            size="lg"
+            className="shrink-0 gap-2 w-full sm:w-auto"
+          >
             <a
               href={`https://m.me/${profile.messenger_username}`}
               target="_blank"
               rel="noreferrer"
-              className="text-sm underline block"
             >
+              <MessageCircle className="h-5 w-5" aria-hidden />
               Message on Messenger
+              <span className="sr-only"> (opens in new tab)</span>
             </a>
-          )}
-        </div>
-        {isOwner && (
-          <Button asChild variant="outline" size="sm">
-            <Link href="/profile/edit">Edit profile</Link>
           </Button>
-        )}
-      </div>
+        ) : null}
+      </header>
 
       {/* Jobs posted */}
       <section className="space-y-4">
@@ -113,10 +137,14 @@ export default async function ProfilePage({ params }: { params: Params }) {
 
       {/* Reviews received as an employer */}
       <section className="space-y-4 max-w-3xl">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">Employer reviews</h2>
-          <StarRating average={rAvg} count={rCount} />
-        </div>
+        <h2 className="text-lg font-semibold">
+          Employer reviews
+          {rCount > 0 && (
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {rCount}
+            </span>
+          )}
+        </h2>
         <ReviewList reviews={reviews} />
       </section>
     </div>

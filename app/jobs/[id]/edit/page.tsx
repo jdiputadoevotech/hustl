@@ -35,13 +35,19 @@ export default async function EditJobPage({
   if (job.employer_id !== user.id) redirect(`/jobs/${id}`);
 
   return (
-    <div className="py-10 space-y-6">
-      <h1 className="text-2xl font-bold">Edit job</h1>
+    <div className="max-w-xl space-y-6 py-10">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold">Edit job</h1>
+        <p className="text-muted-foreground">
+          Update your posting. Changes go live immediately.
+        </p>
+      </header>
       <JobForm
         action={updateJob.bind(null, id)}
         job={job}
         submitLabel="Save changes"
         error={error}
+        cancelHref={`/jobs/${id}`}
       />
     </div>
   );

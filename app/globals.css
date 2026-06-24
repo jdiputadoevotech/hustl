@@ -46,3 +46,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Rating-distribution bars grow in from their left edge on mount. */
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}

@@ -17,11 +17,13 @@ export default async function NewJobPage({
   if (!user) redirect("/auth/login");
 
   return (
-    <div className="py-10 space-y-6">
-      <h1 className="text-2xl font-bold">Post a job</h1>
-      <p className="text-muted-foreground -mt-4">
-        Hiring? Post a gig, part-time, or full-time opening for students.
-      </p>
+    <div className="max-w-xl space-y-6 py-10">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold">Post a job</h1>
+        <p className="text-muted-foreground">
+          Hiring? Post a gig, part-time, or full-time opening for students.
+        </p>
+      </header>
       <JobForm action={createJob} submitLabel="Publish job" error={error} />
     </div>
   );
