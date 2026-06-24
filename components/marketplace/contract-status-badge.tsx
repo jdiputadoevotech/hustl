@@ -3,12 +3,12 @@ import type { ContractStatus } from "@/lib/types/database";
 
 const VARIANT: Record<
   ContractStatus,
-  "default" | "secondary" | "destructive" | "outline"
+  "default" | "secondary" | "destructive" | "success" | "outline"
 > = {
   Offered: "secondary",
   Accepted: "default",
   Declined: "destructive",
-  Completed: "outline",
+  Completed: "success",
   Resigned: "destructive",
 };
 

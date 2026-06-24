@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SubmitButton } from "@/components/marketplace/submit-button";
+import { ConfirmSubmit } from "@/components/marketplace/confirm-submit";
 import { ContractStatusBadge } from "@/components/marketplace/contract-status-badge";
 import { ReviewForm } from "@/components/marketplace/review-form";
 import {
@@ -86,10 +89,19 @@ export default async function DashboardPage({
       </div>
 
       {contractOk && (
-        <p className="text-sm border rounded-md p-3 bg-accent">{contractOk}</p>
+        <p
+          role="status"
+          className="flex items-center gap-2 text-sm border border-success/40 text-success bg-success/10 rounded-md p-3"
+        >
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {contractOk}
+        </p>
       )}
       {contractError && (
-        <p className="text-sm border border-destructive/40 text-destructive rounded-md p-3">
+        <p
+          role="alert"
+          className="text-sm border border-destructive/40 text-destructive rounded-md p-3"
+        >
           {contractError}
         </p>
       )}
@@ -115,12 +127,18 @@ export default async function DashboardPage({
                 <li key={c.id} className="p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <Link
-                        href={job ? `/jobs/${job.id}` : "#"}
-                        className="font-medium hover:underline"
-                      >
-                        {job?.title ?? "Removed job"}
-                      </Link>
+                      {job ? (
+                        <Link
+                          href={`/jobs/${job.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {job.title}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-muted-foreground">
+                          Removed job
+                        </span>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         from{" "}
                         {employer ? (
@@ -141,24 +159,29 @@ export default async function DashboardPage({
                   {status === "Offered" && (
                     <div className="flex gap-2">
                       <form action={acceptOffer.bind(null, c.id)}>
-                        <Button type="submit" size="sm">
-                          Accept
-                        </Button>
+                        <SubmitButton size="sm">Accept</SubmitButton>
                       </form>
-                      <form action={declineOffer.bind(null, c.id)}>
-                        <Button type="submit" size="sm" variant="outline">
-                          Decline
-                        </Button>
-                      </form>
+                      <ConfirmSubmit
+                        action={declineOffer.bind(null, c.id)}
+                        label="Decline"
+                        variant="outline"
+                        size="sm"
+                        confirmTitle="Decline this offer?"
+                        confirmBody={`This permanently declines the offer for "${job?.title ?? "this job"}". The employer will need to send a new one.`}
+                        confirmLabel="Decline offer"
+                      />
                     </div>
                   )}
 
                   {status === "Accepted" && (
-                    <form action={resignContract.bind(null, c.id)}>
-                      <Button type="submit" size="sm" variant="destructive">
-                        Resign
-                      </Button>
-                    </form>
+                    <ConfirmSubmit
+                      action={resignContract.bind(null, c.id)}
+                      label="End contract"
+                      size="sm"
+                      confirmTitle="End this contract?"
+                      confirmBody={`This ends your contract for "${job?.title ?? "this job"}" and can't be undone.`}
+                      confirmLabel="End contract"
+                    />
                   )}
 
                   {status === "Completed" && (
@@ -215,7 +238,7 @@ export default async function DashboardPage({
                   placeholder="student@example.com"
                 />
               </div>
-              <Button type="submit">Send offer</Button>
+              <SubmitButton>Send offer</SubmitButton>
             </form>
           </div>
         )}
@@ -271,12 +294,18 @@ export default async function DashboardPage({
                   <li key={c.id} className="p-4 space-y-3">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <Link
-                          href={job ? `/jobs/${job.id}` : "#"}
-                          className="font-medium hover:underline"
-                        >
-                          {job?.title ?? "Removed job"}
-                        </Link>
+                        {job ? (
+                          <Link
+                            href={`/jobs/${job.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {job.title}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-muted-foreground">
+                            Removed job
+                          </span>
+                        )}
                         <p className="text-xs text-muted-foreground">
                           to{" "}
                           {student ? (
@@ -297,19 +326,16 @@ export default async function DashboardPage({
                     {status === "Accepted" && (
                       <div className="flex gap-2">
                         <form action={completeContract.bind(null, c.id)}>
-                          <Button type="submit" size="sm">
-                            Mark completed
-                          </Button>
+                          <SubmitButton size="sm">Mark completed</SubmitButton>
                         </form>
-                        <form action={resignContract.bind(null, c.id)}>
-                          <Button
-                            type="submit"
-                            size="sm"
-                            variant="destructive"
-                          >
-                            End / resign
-                          </Button>
-                        </form>
+                        <ConfirmSubmit
+                          action={resignContract.bind(null, c.id)}
+                          label="End contract"
+                          size="sm"
+                          confirmTitle="End this contract?"
+                          confirmBody={`This ends the contract for "${job?.title ?? "this job"}" with ${student?.full_name ?? "this student"} and can't be undone.`}
+                          confirmLabel="End contract"
+                        />
                       </div>
                     )}
                   </li>

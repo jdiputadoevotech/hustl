@@ -40,6 +40,7 @@ export function LoginForm({
       if (error) throw error;
       // The user already has an active session.
       router.push("/dashboard");
+      router.refresh(); // re-render server components (Navbar) with new auth cookies
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
