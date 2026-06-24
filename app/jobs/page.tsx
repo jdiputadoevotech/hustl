@@ -37,7 +37,7 @@ export default async function JobsPage({
   let query = supabase
     .from("jobs_with_employer")
     .select(
-      "id, title, category, job_type, pay_min, pay_max, pay_period, employer_name, employer_rating_avg, employer_rating_count",
+      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, created_at, employer_name, employer_rating_avg, employer_rating_count",
     );
 
   if (q) query = query.ilike("title", `%${q}%`);
@@ -118,6 +118,13 @@ export default async function JobsPage({
                 pay_min: j.pay_min,
                 pay_max: j.pay_max,
                 pay_period: j.pay_period,
+                skills: j.skills,
+                location: j.location,
+                work_mode: j.work_mode,
+                term: j.term,
+                company: j.company,
+                is_urgent: j.is_urgent,
+                created_at: j.created_at,
                 employer_name: j.employer_name,
                 employer_rating_avg: j.employer_rating_avg,
                 employer_rating_count: j.employer_rating_count,

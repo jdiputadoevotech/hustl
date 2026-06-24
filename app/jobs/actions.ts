@@ -13,6 +13,12 @@ type JobFields = {
   pay_min: number | null;
   pay_max: number | null;
   pay_period: string;
+  skills: string[];
+  location: string | null;
+  work_mode: string | null;
+  term: string | null;
+  company: string | null;
+  is_urgent: boolean;
 };
 
 function readJob(formData: FormData): JobFields {
@@ -20,6 +26,10 @@ function readJob(formData: FormData): JobFields {
     const n = Number(v);
     return v == null || v === "" || Number.isNaN(n) ? null : n;
   };
+  const skills = String(formData.get("skills") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   return {
     title: String(formData.get("title") ?? "").trim(),
     description: String(formData.get("description") ?? "").trim() || null,
@@ -28,6 +38,12 @@ function readJob(formData: FormData): JobFields {
     pay_min: num(formData.get("pay_min")),
     pay_max: num(formData.get("pay_max")),
     pay_period: String(formData.get("pay_period") ?? "project"),
+    skills,
+    location: String(formData.get("location") ?? "").trim() || null,
+    work_mode: String(formData.get("work_mode") ?? "").trim() || null,
+    term: String(formData.get("term") ?? "").trim() || null,
+    company: String(formData.get("company") ?? "").trim() || null,
+    is_urgent: formData.get("is_urgent") === "on",
   };
 }
 

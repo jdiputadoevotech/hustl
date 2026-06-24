@@ -14,6 +14,9 @@ export type JobType = "gig" | "part-time" | "full-time";
 /** Pay cadence. 'project' is for gigs; the rest are salary rates. */
 export type PayPeriod = "project" | "hourly" | "weekly" | "monthly";
 
+/** Where the work happens. Null when the employer left it unset. */
+export type WorkMode = "on-site" | "remote" | "hybrid";
+
 /** Lifecycle of a hiring contract. Matches the CHECK on contracts.status. */
 export type ContractStatus =
   | "Offered"
@@ -47,6 +50,12 @@ export interface Job {
   pay_min: number | null;
   pay_max: number | null;
   pay_period: PayPeriod;
+  skills: string[]; // required skills, rendered as badges
+  location: string | null;
+  work_mode: WorkMode | null;
+  term: string | null; // free-text duration, e.g. "3-4 days"
+  company: string | null; // blank => individual posting
+  is_urgent: boolean;
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }

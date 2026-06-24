@@ -58,6 +58,12 @@ export async function Navbar() {
 
         {/* Right side */}
         <div className="flex items-center gap-5 sm:gap-6 shrink-0 ml-auto">
+          <Link
+            href="/jobs"
+            className="hidden sm:inline text-base font-medium text-foreground/80 hover:text-foreground"
+          >
+            Jobs
+          </Link>
           {!hasEnvVars ? (
             <EnvVarWarning />
           ) : user ? (

@@ -1,18 +1,33 @@
 import Link from "next/link";
+import { Flame, MapPin, Clock } from "lucide-react";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { StarRating } from "@/components/marketplace/star-rating";
+import { Badge } from "@/components/ui/badge";
 import {
   JobTypeBadge,
   JOB_TYPE_BANNER_STYLE,
-  JOB_TYPE_LABEL,
 } from "@/components/marketplace/job-type-badge";
 import { formatPay } from "@/lib/pay";
+import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { Job } from "@/lib/types/database";
 
 type JobCardData = Pick<
   Job,
-  "id" | "title" | "category" | "job_type" | "pay_min" | "pay_max" | "pay_period"
+  | "id"
+  | "title"
+  | "category"
+  | "job_type"
+  | "pay_min"
+  | "pay_max"
+  | "pay_period"
+  | "skills"
+  | "location"
+  | "work_mode"
+  | "term"
+  | "company"
+  | "is_urgent"
+  | "created_at"
 > & {
   employer_name?: string | null;
   employer_rating_avg?: number | null;
@@ -22,33 +37,70 @@ type JobCardData = Pick<
 /** Job board card: colored type banner, employer row, title, rating, pay. */
 export function JobCard({ job }: { job: JobCardData }) {
   const employer = job.employer_name ?? "An employer";
+  const poster = job.company || employer;
+  const skills = job.skills ?? [];
+  const place = job.work_mode || job.location;
   return (
     <Link href={`/jobs/${job.id}`} className="group block">
       <div className="overflow-hidden rounded-lg border bg-card transition-shadow group-hover:shadow-md h-full flex flex-col">
-        {/* Type banner (replaces a cover image) */}
+        {/* Title banner (replaces a cover image) */}
         <div
           className={cn(
-            "h-20 flex items-center justify-center",
+            "h-24 flex items-center justify-center p-3",
             JOB_TYPE_BANNER_STYLE[job.job_type],
           )}
         >
-          <span className="text-white font-semibold tracking-wide">
-            {JOB_TYPE_LABEL[job.job_type]}
-          </span>
+          <p className="text-white font-semibold text-center leading-snug line-clamp-3">
+            {job.title}
+          </p>
         </div>
 
         <div className="p-3 space-y-2 flex-1 flex flex-col">
-          {/* Employer row */}
+          {/* Category + urgent + type */}
           <div className="flex items-center gap-2">
-            <AvatarInitials name={employer} className="h-6 w-6 text-[10px]" />
-            <span className="text-sm font-medium truncate">{employer}</span>
+            <span className="text-xs font-medium text-muted-foreground truncate">
+              {job.category ?? "General"}
+            </span>
+            {job.is_urgent && (
+              <Badge
+                variant="destructive"
+                className="gap-1 px-1.5 py-0 shrink-0"
+              >
+                <Flame className="h-3 w-3" />
+                Urgent
+              </Badge>
+            )}
             <JobTypeBadge type={job.job_type} className="ml-auto shrink-0" />
           </div>
 
-          {/* Title */}
-          <p className="text-sm text-muted-foreground line-clamp-2 min-h-10 group-hover:text-foreground">
-            {job.title}
-          </p>
+          {/* Meta: mode/location + term */}
+          {(place || job.term) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {place && (
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {place}
+                </span>
+              )}
+              {job.term && (
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {job.term}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Skill badges */}
+          {skills.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {skills.map((s) => (
+                <Badge key={s} variant="outline" className="font-normal">
+                  {s}
+                </Badge>
+              ))}
+            </div>
+          )}
 
           {/* Employer rating */}
           <StarRating
@@ -56,11 +108,17 @@ export function JobCard({ job }: { job: JobCardData }) {
             count={job.employer_rating_count ?? 0}
           />
 
-          {/* Category + pay */}
-          <div className="mt-auto pt-1 border-t flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground truncate">
-              {job.category ?? "General"}
-            </span>
+          {/* Footer: poster + posted time, pay */}
+          <div className="mt-auto pt-2 border-t flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <AvatarInitials name={poster} className="h-6 w-6 text-[10px]" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{poster}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {timeAgo(job.created_at)}
+                </p>
+              </div>
+            </div>
             <span className="text-sm font-bold shrink-0">
               {formatPay(job.pay_min, job.pay_max, job.pay_period)}
             </span>

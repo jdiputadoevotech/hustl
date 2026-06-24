@@ -29,7 +29,7 @@ export default async function ProfilePage({ params }: { params: Params }) {
   const { data: jobs } = await supabase
     .from("jobs_with_employer")
     .select(
-      "id, title, category, job_type, pay_min, pay_max, pay_period, employer_name, employer_rating_avg, employer_rating_count",
+      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, created_at, employer_name, employer_rating_avg, employer_rating_count",
     )
     .eq("employer_id", id)
     .order("created_at", { ascending: false });

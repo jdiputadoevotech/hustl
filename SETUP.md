@@ -121,6 +121,13 @@ create table public.jobs (
   pay_max     numeric(10,2),
   pay_period  text not null default 'project'
               check (pay_period in ('project','hourly','weekly','monthly')),
+  -- Hiring detail surfaced on the job card.
+  skills      text[] not null default '{}',  -- required skills, shown as badges
+  location    text,                           -- free text, e.g. 'Manila', 'Campus'
+  work_mode   text check (work_mode in ('on-site','remote','hybrid')),
+  term        text,                           -- free-text duration, e.g. '3-4 days'
+  company     text,                           -- blank => individual posting
+  is_urgent   boolean not null default false,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -324,6 +331,37 @@ group by j.id, p.full_name;
 ```
 
 That's the whole schema — there is no separate Storage step (jobs have no images).
+
+### Already ran the Fresh Migration? Add the new job columns
+
+If your `jobs` table already exists (from an earlier run), paste this **idempotent**
+block instead of recreating everything. It adds the hiring-detail columns and
+refreshes the view so the new columns flow through.
+
+```sql
+alter table public.jobs add column if not exists skills    text[] not null default '{}';
+alter table public.jobs add column if not exists location  text;
+alter table public.jobs add column if not exists work_mode text
+  check (work_mode in ('on-site','remote','hybrid'));
+alter table public.jobs add column if not exists term      text;
+alter table public.jobs add column if not exists company   text;
+alter table public.jobs add column if not exists is_urgent boolean not null default false;
+
+-- Recreate the view: it expands `j.*` at creation time, so it must be re-run
+-- to pick up the new columns. Drop first — `create or replace` cannot change
+-- column order, and the new `j.*` columns shift existing positions.
+drop view if exists public.jobs_with_employer;
+create view public.jobs_with_employer as
+select
+  j.*,
+  p.full_name as employer_name,
+  coalesce(round(avg(r.rating), 1), 0)::numeric(2, 1) as employer_rating_avg,
+  count(r.id) as employer_rating_count
+from public.jobs j
+left join public.profiles p on p.id = j.employer_id
+left join public.reviews  r on r.employer_id = j.employer_id
+group by j.id, p.full_name;
+```
 
 ---
 

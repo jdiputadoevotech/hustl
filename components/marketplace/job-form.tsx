@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { GIG_CATEGORIES } from "@/lib/categories";
 import { JOB_TYPE_LABEL } from "@/components/marketplace/job-type-badge";
-import type { Job, JobType, PayPeriod } from "@/lib/types/database";
+import type { Job, JobType, PayPeriod, WorkMode } from "@/lib/types/database";
 
 interface JobFormProps {
   action: (formData: FormData) => void | Promise<void>;
@@ -20,6 +20,12 @@ interface JobFormProps {
     | "pay_min"
     | "pay_max"
     | "pay_period"
+    | "skills"
+    | "location"
+    | "work_mode"
+    | "term"
+    | "company"
+    | "is_urgent"
   >;
   submitLabel: string;
   error?: string;
@@ -27,6 +33,7 @@ interface JobFormProps {
 
 const TYPES: JobType[] = ["gig", "part-time", "full-time"];
 const SALARY_PERIODS: PayPeriod[] = ["hourly", "weekly", "monthly"];
+const WORK_MODES: WorkMode[] = ["on-site", "remote", "hybrid"];
 
 /** Create/edit a job. Pay fields adapt to the selected job type. */
 export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
@@ -55,6 +62,20 @@ export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
           defaultValue={job?.title}
           placeholder="Need a tutor for Calculus 2"
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="company">Company</Label>
+        <Input
+          id="company"
+          name="company"
+          maxLength={120}
+          defaultValue={job?.company ?? ""}
+          placeholder="BrightLeaf Studio"
+        />
+        <p className="text-xs text-muted-foreground">
+          Leave blank to post as an individual.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -91,6 +112,57 @@ export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
             ))}
           </select>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="work_mode">Work mode</Label>
+          <select
+            id="work_mode"
+            name="work_mode"
+            defaultValue={job?.work_mode ?? ""}
+            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+          >
+            <option value="">Not specified</option>
+            {WORK_MODES.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="location">Location</Label>
+          <Input
+            id="location"
+            name="location"
+            maxLength={120}
+            defaultValue={job?.location ?? ""}
+            placeholder="Remote, Manila, Campus…"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="term">Term</Label>
+        <Input
+          id="term"
+          name="term"
+          maxLength={60}
+          defaultValue={job?.term ?? ""}
+          placeholder="e.g. 3-4 days, 2 weeks, Ongoing"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="skills">Skills needed (comma-separated)</Label>
+        <Input
+          id="skills"
+          name="skills"
+          defaultValue={(job?.skills ?? []).join(", ")}
+          placeholder="Figma, Canva, Branding"
+        />
       </div>
 
       {/* Pay fields adapt to job type */}
@@ -154,6 +226,19 @@ export function JobForm({ action, job, submitLabel, error }: JobFormProps) {
           defaultValue={job?.description ?? ""}
           placeholder="Describe the work, schedule, and what you're looking for."
         />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          id="is_urgent"
+          name="is_urgent"
+          type="checkbox"
+          defaultChecked={job?.is_urgent ?? false}
+          className="h-4 w-4 rounded border-input accent-red-600"
+        />
+        <Label htmlFor="is_urgent" className="font-normal">
+          Mark this job as urgent
+        </Label>
       </div>
 
       <Button type="submit">{submitLabel}</Button>
