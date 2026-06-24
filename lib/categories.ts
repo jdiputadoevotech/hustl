@@ -1,39 +1,39 @@
 /**
- * Gig categories offered on Hustl, each with a short description shown in the
+ * Job categories on Hustl, each with a short description shown in the
  * marketplace category dropdown. Used by the post/edit forms and browse filter.
  */
 export const GIG_CATEGORIES = [
   {
     name: "Web Development",
-    description: "Websites, web apps, and bug fixes built by student devs.",
+    description: "Hire students to build or fix websites and web apps.",
   },
   {
     name: "Graphic Design",
-    description: "Logos, posters, and branding for orgs and events.",
+    description: "Find students for logos, posters, and branding work.",
   },
   {
     name: "Writing & Translation",
-    description: "Essays, articles, resumes, and Bisaya/English translation.",
+    description: "Get help with writing, editing, and Bisaya/English translation.",
   },
   {
     name: "Video & Animation",
-    description: "Editing, motion graphics, and short promo videos.",
+    description: "Hire for editing, motion graphics, and promo videos.",
   },
   {
     name: "Tutoring",
-    description: "One-on-one help across subjects, exams, and thesis support.",
+    description: "Find student tutors for subjects, exams, and thesis support.",
   },
   {
     name: "Photography",
-    description: "Event coverage, portraits, and product shots on campus.",
+    description: "Book students for events, portraits, and product shots.",
   },
   {
     name: "Digital Marketing",
-    description: "Social media management, content, and page growth.",
+    description: "Hire for social media, content, and page growth.",
   },
   {
     name: "Other",
-    description: "Anything else a fellow Carolinian can help you with.",
+    description: "Any other work a fellow Carolinian can take on.",
   },
 ] as const;
 

@@ -33,6 +33,10 @@
 }
 
 @layer base {
+  /* Scale the whole UI up a touch: every rem-based size grows with this. */
+  html {
+    font-size: 17px;
+  }
   * {
     @apply border-border;
   }
