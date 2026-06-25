@@ -9,11 +9,12 @@ import { StarRating } from "@/components/marketplace/star-rating";
 import { JobTypeBadge } from "@/components/marketplace/job-type-badge";
 import { ContactEmployerButton } from "@/components/marketplace/contact-employer-button";
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
+import { FaqAccordion } from "@/components/marketplace/faq-accordion";
 import type { ReviewItem } from "@/components/marketplace/review-list";
 import { formatPay, payPeriodLabel } from "@/lib/pay";
 import { timeAgo } from "@/lib/time";
-import { deleteJob } from "../actions";
-import type { JobType, PayPeriod } from "@/lib/types/database";
+import { deleteJob, toggleJobVisibility } from "../actions";
+import type { Faq, JobType, PayPeriod } from "@/lib/types/database";
 
 type Params = Promise<{ id: string }>;
 
@@ -24,7 +25,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const { data: job, error: jobError } = await supabase
     .from("jobs")
     .select(
-      "id, title, description, job_type, category, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, created_at, employer_id, profiles ( id, full_name, messenger_username )",
+      "id, title, description, job_type, category, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, faqs, is_disabled, created_at, employer_id, profiles ( id, full_name, messenger_username )",
     )
     .eq("id", id)
     .maybeSingle();
@@ -62,7 +63,12 @@ export default async function JobDetailPage({ params }: { params: Params }) {
 
   const user = await getCurrentUser();
   const isOwner = user?.id === job.employer_id;
+
+  // Hidden jobs (draft or <2 FAQs) are owner-only; the public gets a 404.
+  if (job.is_disabled && !isOwner) notFound();
+
   const jobType = job.job_type as JobType;
+  const faqs = (job.faqs as Faq[] | null) ?? [];
 
   return (
     // ponytail: page-local width override — narrower than the global 1400px container in app/layout.tsx. Bump max-w-6xl to widen/narrow.
@@ -149,9 +155,29 @@ export default async function JobDetailPage({ params }: { params: Params }) {
 
             {isOwner ? (
               <div className="space-y-2">
+                {job.is_disabled && (
+                  <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                    {faqs.length < 2
+                      ? "Hidden — add at least 2 FAQs to publish this job."
+                      : "Hidden — not shown in public listings."}
+                  </p>
+                )}
                 <Button asChild className="w-full" variant="outline">
                   <Link href={`/jobs/${job.id}/edit`}>Edit job</Link>
                 </Button>
+                {faqs.length >= 2 && (
+                  <form
+                    action={toggleJobVisibility.bind(
+                      null,
+                      job.id,
+                      !job.is_disabled,
+                    )}
+                  >
+                    <Button type="submit" variant="outline" className="w-full">
+                      {job.is_disabled ? "Unhide job" : "Hide job"}
+                    </Button>
+                  </form>
+                )}
                 <form action={deleteJob.bind(null, job.id)}>
                   <Button
                     type="submit"
@@ -184,6 +210,8 @@ export default async function JobDetailPage({ params }: { params: Params }) {
           </div>
         </aside>
       </div>
+
+      <FaqAccordion faqs={faqs} />
 
       <ReviewsSection reviews={reviews} avg={rAvg} count={rCount} />
     </div>

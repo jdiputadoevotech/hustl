@@ -128,6 +128,12 @@ create table public.jobs (
   term        text,                           -- free-text duration, e.g. '3-4 days'
   company     text,                           -- blank => individual posting
   is_urgent   boolean not null default false,
+  faqs        jsonb not null default '[]'::jsonb,  -- [{ "question", "answer" }], max 10
+  -- Public-visibility flag, set by the server. A job is listed (false) only when
+  -- the owner Posts it with 2–10 valid FAQs; Saving a draft, or dropping below 2
+  -- FAQs, keeps it hidden. Disabled jobs stay visible to their owner only.
+  -- Defaults true so a freshly-added row (0 FAQs) starts hidden until it qualifies.
+  is_disabled boolean not null default true,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -346,6 +352,10 @@ alter table public.jobs add column if not exists work_mode text
 alter table public.jobs add column if not exists term      text;
 alter table public.jobs add column if not exists company   text;
 alter table public.jobs add column if not exists is_urgent boolean not null default false;
+alter table public.jobs add column if not exists faqs        jsonb   not null default '[]'::jsonb;
+-- default true => existing jobs (0 FAQs) hide until their owner adds 2+ FAQs.
+-- Change to `default false` instead if you'd rather grandfather current jobs.
+alter table public.jobs add column if not exists is_disabled boolean not null default true;
 
 -- Recreate the view: it expands `j.*` at creation time, so it must be re-run
 -- to pick up the new columns. Drop first — `create or replace` cannot change

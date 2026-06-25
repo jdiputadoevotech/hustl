@@ -17,6 +17,12 @@ export type PayPeriod = "project" | "hourly" | "weekly" | "monthly";
 /** Where the work happens. Null when the employer left it unset. */
 export type WorkMode = "on-site" | "remote" | "hybrid";
 
+/** A single question/answer pair shown in a job's FAQ accordion. */
+export interface Faq {
+  question: string;
+  answer: string;
+}
+
 /** Lifecycle of a hiring contract. Matches the CHECK on contracts.status. */
 export type ContractStatus =
   | "Offered"
@@ -56,6 +62,8 @@ export interface Job {
   term: string | null; // free-text duration, e.g. "3-4 days"
   company: string | null; // blank => individual posting
   is_urgent: boolean;
+  faqs: Faq[]; // employer Q&A, 2–10 to be publicly listed
+  is_disabled: boolean; // hidden from public listings (manual draft or <2 FAQs)
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import type { MouseEvent } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,10 +11,22 @@ import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/marketplace/submit-button";
 import { FormError } from "@/components/marketplace/form-error";
 import { FormSection } from "@/components/marketplace/form-section";
+import { FaqEditor } from "@/components/marketplace/faq-editor";
 import { Card, CardContent } from "@/components/ui/card";
 import { GIG_CATEGORIES } from "@/lib/categories";
 import { JOB_TYPE_LABEL } from "@/components/marketplace/job-type-badge";
-import type { Job, JobType, PayPeriod, WorkMode } from "@/lib/types/database";
+import type {
+  Faq,
+  Job,
+  JobType,
+  PayPeriod,
+  WorkMode,
+} from "@/lib/types/database";
+
+const MIN_LISTED_FAQS = 2;
+const MAX_FAQS = 10;
+const completeFaqs = (faqs: Faq[]) =>
+  faqs.filter((f) => f.question.trim() && f.answer.trim());
 
 interface JobFormProps {
   action: (formData: FormData) => void | Promise<void>;
@@ -32,6 +45,8 @@ interface JobFormProps {
     | "term"
     | "company"
     | "is_urgent"
+    | "faqs"
+    | "is_disabled"
   >;
   submitLabel: string;
   error?: string;
@@ -53,6 +68,41 @@ export function JobForm({
 }: JobFormProps) {
   const [type, setType] = useState<JobType>(job?.job_type ?? "gig");
   const isGig = type === "gig";
+
+  const [faqs, setFaqs] = useState<Faq[]>(job?.faqs ?? []);
+  const [faqError, setFaqError] = useState(false);
+  const faqsReady = (() => {
+    const n = completeFaqs(faqs).length;
+    return n >= MIN_LISTED_FAQS && n <= MAX_FAQS;
+  })();
+
+  const updateFaqs = (next: Faq[]) => {
+    setFaqs(next);
+    // Clear the red state as soon as the requirement is satisfied.
+    if (faqError) {
+      const n = completeFaqs(next).length;
+      if (n >= MIN_LISTED_FAQS && n <= MAX_FAQS) setFaqError(false);
+    }
+  };
+
+  // Post = publish. Validate native required fields + the 2-FAQ rule; on failure
+  // highlight the FAQ section red and block, like inline login validation. The
+  // secondary Save button has no handler, so drafts always go through.
+  const handlePost = (e: MouseEvent<HTMLButtonElement>) => {
+    const form = e.currentTarget.form;
+    const nativeOk = form ? form.reportValidity() : true;
+    if (!faqsReady) setFaqError(true);
+    if (!nativeOk || !faqsReady) {
+      e.preventDefault();
+      // Only pull focus to the FAQs when the native fields are already fine —
+      // otherwise let the browser keep the user on the offending input.
+      if (nativeOk && !faqsReady) {
+        document
+          .getElementById("faqs-field")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  };
 
   // Default salary period for part/full-time (ignore a stored 'project').
   const initialPeriod =
@@ -247,6 +297,25 @@ export function JobForm({
           </FormSection>
 
           <FormSection
+            title="FAQs"
+            description="Common questions students ask. You need 2–10 to Post; you can Save a draft with fewer."
+          >
+            <div id="faqs-field">
+              <FaqEditor
+                value={faqs}
+                onChange={updateFaqs}
+                invalid={faqError}
+              />
+              {faqError && (
+                <p className="mt-2 text-sm font-medium text-destructive">
+                  Add at least 2 complete FAQs (question and answer) to post this
+                  job.
+                </p>
+              )}
+            </div>
+          </FormSection>
+
+          <FormSection
             title="Details"
             description="Describe the work and flag it if it's time-sensitive."
           >
@@ -285,14 +354,23 @@ export function JobForm({
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-3">
-        <SubmitButton>{submitLabel}</SubmitButton>
+      <div className="flex flex-wrap items-center gap-3">
+        <SubmitButton name="intent" value="post" onClick={handlePost}>
+          Post job
+        </SubmitButton>
+        <SubmitButton name="intent" value="save" variant="outline">
+          {submitLabel}
+        </SubmitButton>
         {cancelHref && (
           <Button asChild variant="ghost">
             <Link href={cancelHref}>Cancel</Link>
           </Button>
         )}
       </div>
+      <p className="text-xs text-muted-foreground">
+        Post publishes to the job board (needs 2–10 FAQs). Save keeps your
+        changes without publishing.
+      </p>
     </form>
   );
 }

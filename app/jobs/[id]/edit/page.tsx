@@ -26,7 +26,7 @@ export default async function EditJobPage({
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, title, description, job_type, category, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, employer_id",
+      "id, title, description, job_type, category, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, faqs, is_disabled, employer_id",
     )
     .eq("id", id)
     .single();

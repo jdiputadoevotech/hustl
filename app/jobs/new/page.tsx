@@ -24,7 +24,7 @@ export default async function NewJobPage({
           Hiring? Post a gig, part-time, or full-time opening for students.
         </p>
       </header>
-      <JobForm action={createJob} submitLabel="Publish job" error={error} />
+      <JobForm action={createJob} submitLabel="Save draft" error={error} />
     </div>
   );
 }

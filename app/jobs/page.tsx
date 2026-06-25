@@ -40,6 +40,8 @@ export default async function JobsPage({
       "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, created_at, employer_name, employer_rating_avg, employer_rating_count",
     );
 
+  query = query.eq("is_disabled", false); // hide drafts / incomplete jobs
+
   if (q) query = query.ilike("title", `%${q}%`);
   if (category) query = query.eq("category", category);
   if (type) query = query.eq("job_type", type);

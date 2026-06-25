@@ -35,6 +35,7 @@ export default async function ProfilePage({ params }: { params: Params }) {
       "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, created_at, employer_name, employer_rating_avg, employer_rating_count",
     )
     .eq("employer_id", id)
+    .eq("is_disabled", false) // public profile shows only listed jobs
     .order("created_at", { ascending: false });
 
   // Reviews this user received as an employer.
