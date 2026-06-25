@@ -65,7 +65,8 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const jobType = job.job_type as JobType;
 
   return (
-    <div className="py-6 space-y-12">
+    // ponytail: page-local width override — narrower than the global 1400px container in app/layout.tsx. Bump max-w-6xl to widen/narrow.
+    <div className="mx-auto max-w-6xl py-6 space-y-12">
       <div className="grid md:grid-cols-3 gap-8">
         <div className="md:col-span-2 space-y-5">
           <div className="flex items-center gap-3 flex-wrap">

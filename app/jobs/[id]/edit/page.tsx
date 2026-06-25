@@ -35,7 +35,7 @@ export default async function EditJobPage({
   if (job.employer_id !== user.id) redirect(`/jobs/${id}`);
 
   return (
-    <div className="max-w-xl space-y-6 py-10">
+    <div className="space-y-6 py-10">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">Edit job</h1>
         <p className="text-muted-foreground">

@@ -17,7 +17,7 @@ export default async function NewJobPage({
   if (!user) redirect("/auth/login");
 
   return (
-    <div className="max-w-xl space-y-6 py-10">
+    <div className="space-y-6 py-10">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">Post a job</h1>
         <p className="text-muted-foreground">
