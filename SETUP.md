@@ -95,6 +95,10 @@ drop table if exists public.jobs      cascade;
 create table if not exists public.profiles (
   id                 uuid primary key references auth.users (id) on delete cascade,
   full_name          text,
+  -- Account role. A label only for now (no admin pages yet) — RLS still lets
+  -- any authenticated user post a job or be hired regardless of role.
+  role               text not null default 'student'
+                     check (role in ('student','employer','admin')),
   messenger_username text,            -- powers m.me/<username> contact handoff
   bio                text,
   skills             text[],
@@ -163,7 +167,6 @@ create table public.reviews (
   contract_id uuid not null references public.contracts (id) on delete cascade,
   employer_id uuid not null references public.profiles (id) on delete cascade, -- reviewee
   reviewer_id uuid not null references public.profiles (id) on delete cascade, -- the student
-  job_id      uuid not null references public.jobs (id) on delete cascade,
   rating      int  not null check (rating between 1 and 5),
   comment     text,
   created_at  timestamptz not null default now(),
@@ -371,6 +374,21 @@ from public.jobs j
 left join public.profiles p on p.id = j.employer_id
 left join public.reviews  r on r.employer_id = j.employer_id
 group by j.id, p.full_name;
+```
+
+### Already ran the Fresh Migration? Add the role column + slim down reviews
+
+Adds `profiles.role` and drops the redundant `reviews.job_id` (it was always
+derivable from `contract_id`, and no query reads it). Idempotent.
+
+```sql
+-- Account role: existing rows default to 'student'. RLS is unchanged.
+alter table public.profiles
+  add column if not exists role text not null default 'student'
+  check (role in ('student','employer','admin'));
+
+-- Drop the redundant, unread job_id from reviews (contract_id implies it).
+alter table public.reviews drop column if exists job_id;
 ```
 
 ---

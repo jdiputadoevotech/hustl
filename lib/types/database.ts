@@ -17,6 +17,9 @@ export type PayPeriod = "project" | "hourly" | "weekly" | "monthly";
 /** Where the work happens. Null when the employer left it unset. */
 export type WorkMode = "on-site" | "remote" | "hybrid";
 
+/** Account role. A label for now — RLS still lets anyone post or be hired. */
+export type Role = "student" | "employer" | "admin";
+
 /** A single question/answer pair shown in a job's FAQ accordion. */
 export interface Faq {
   question: string;
@@ -33,11 +36,12 @@ export type ContractStatus =
 
 /**
  * A user profile. Row id matches auth.users.id (1:1 with Supabase Auth).
- * Anyone can act as an employer or a student — there is no role column.
+ * `role` is a label only — anyone can still act as an employer or a student.
  */
 export interface Profile {
   id: string; // uuid, FK -> auth.users.id
   full_name: string | null;
+  role: Role; // defaults to 'student'
   messenger_username: string | null; // used for m.me/<username> handoff
   bio: string | null;
   skills: string[] | null;
@@ -98,7 +102,6 @@ export interface Review {
   contract_id: string; // uuid, FK -> contracts.id
   employer_id: string; // uuid, FK -> profiles.id (reviewee)
   reviewer_id: string; // uuid, FK -> profiles.id (the student)
-  job_id: string; // uuid, FK -> jobs.id
   rating: number; // 1..5
   comment: string | null;
   created_at: string; // timestamptz

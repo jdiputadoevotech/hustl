@@ -1,15 +1,18 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Flame, MapPin, Clock } from "lucide-react";
+import { Flame, MapPin, Clock, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StarRating } from "@/components/marketplace/star-rating";
+import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { JobTypeBadge } from "@/components/marketplace/job-type-badge";
 import { ContactEmployerButton } from "@/components/marketplace/contact-employer-button";
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
 import { FaqAccordion } from "@/components/marketplace/faq-accordion";
+import { QuickFaq } from "@/components/marketplace/quick-faq";
 import type { ReviewItem } from "@/components/marketplace/review-list";
 import { formatPay, payPeriodLabel } from "@/lib/pay";
 import { timeAgo } from "@/lib/time";
@@ -70,11 +73,53 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const jobType = job.job_type as JobType;
   const faqs = (job.faqs as Faq[] | null) ?? [];
 
+  const employerName = employer
+    ? job.company && employer.full_name
+      ? `${job.company} (${employer.full_name})`
+      : job.company || employer.full_name || "an employer"
+    : null;
+
+  // Meta groups for the single divider-separated facts row. Only present groups
+  // are pushed, so the interleaved dividers never bracket an empty group.
+  const modeLocation = [job.work_mode, job.location].filter(Boolean).join(" · ");
+  const metaGroups: ReactNode[] = [];
+  if (modeLocation) {
+    metaGroups.push(
+      <span className="inline-flex items-center gap-1.5">
+        <MapPin className="h-4 w-4" />
+        {modeLocation}
+      </span>,
+    );
+  }
+  if (job.term) {
+    metaGroups.push(
+      <span className="inline-flex items-center gap-1.5">
+        <Clock className="h-4 w-4" />
+        {job.term}
+      </span>,
+    );
+  }
+  if (job.skills && job.skills.length > 0) {
+    metaGroups.push(
+      <span className="inline-flex items-center gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide">
+          Skills required:
+        </span>
+        {job.skills.map((s: string) => (
+          <Badge key={s} variant="outline" className="font-normal">
+            {s}
+          </Badge>
+        ))}
+      </span>,
+    );
+  }
+
   return (
     // ponytail: page-local width override — narrower than the global 1400px container in app/layout.tsx. Bump max-w-6xl to widen/narrow.
-    <div className="mx-auto max-w-6xl py-6 space-y-12">
-      <div className="grid md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 space-y-5">
+    <div className="mx-auto max-w-6xl py-6">
+      <div className="grid md:grid-cols-3 gap-8 items-start">
+        <div className="md:col-span-2 space-y-12">
+        <div className="space-y-5">
           <div className="flex items-center gap-3 flex-wrap">
             <JobTypeBadge type={jobType} />
             {job.category && (
@@ -90,58 +135,59 @@ export default async function JobDetailPage({ params }: { params: Params }) {
             )}
           </div>
           <h1 className="text-3xl font-bold">{job.title}</h1>
-          {(job.work_mode || job.location || job.term) && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              {(job.work_mode || job.location) && (
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4" />
-                  {[job.work_mode, job.location].filter(Boolean).join(" · ")}
-                </span>
-              )}
-              {job.term && (
-                <span className="inline-flex items-center gap-1.5">
-                  <Clock className="h-4 w-4" />
-                  {job.term}
-                </span>
-              )}
-            </div>
-          )}
           {employer && (
-            <div className="flex items-center gap-4 flex-wrap">
-              <Link
-                href={`/profile/${employer.id}`}
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                posted by {job.company || employer.full_name || "an employer"}
-                {job.company && employer.full_name
-                  ? ` (${employer.full_name})`
-                  : ""}
-              </Link>
-              <span className="text-sm text-muted-foreground">
-                {timeAgo(job.created_at)}
-              </span>
-              <StarRating average={rAvg} count={rCount} />
+            <div className="flex items-center gap-3">
+              <AvatarInitials
+                name={job.company || employer.full_name}
+                className="h-11 w-11 text-sm"
+              />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Link
+                    href={`/profile/${employer.id}`}
+                    className="font-semibold hover:underline"
+                  >
+                    {employerName}
+                  </Link>
+                  <span className="text-sm text-muted-foreground">
+                    {timeAgo(job.created_at)}
+                  </span>
+                </div>
+                <StarRating average={rAvg} count={rCount} compact={false} />
+              </div>
             </div>
           )}
-          {job.skills && job.skills.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {job.skills.map((s: string) => (
-                <Badge key={s} variant="outline" className="font-normal">
-                  {s}
-                </Badge>
-              ))}
-            </div>
+          {metaGroups.length > 0 && (
+            <>
+              <div className="border-t" />
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                {metaGroups.map((group, i) => (
+                  <div key={i} className="flex items-center gap-x-4">
+                    {i > 0 && <span className="h-4 w-px bg-border" />}
+                    {group}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
           <p className="whitespace-pre-wrap text-foreground/90">
             {job.description ?? "No description provided."}
           </p>
+          </div>
+
+          <FaqAccordion faqs={faqs} />
+
+          <ReviewsSection reviews={reviews} avg={rAvg} count={rCount} />
         </div>
 
-        {/* Sidebar: pay + actions */}
-        <aside className="md:col-span-1">
-          <div className="rounded-xl border p-6 space-y-4 sticky top-24">
-            <div>
-              <span className="text-sm text-muted-foreground">
+        {/* Sidebar: pay + actions — pins under the navbar (h-20) on scroll.
+            self-stretch makes the aside as tall as the left column so the
+            sticky card has room to travel; grid items-start alone would shrink
+            it to the card and kill the stick. */}
+        <aside className="md:col-span-1 md:self-stretch">
+          <div className="sticky top-24 overflow-hidden rounded-xl border bg-background p-6 space-y-5">
+            <div className="-mx-6 -mt-6 space-y-1 border-b bg-muted/50 px-6 py-5">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {payPeriodLabel(job.pay_period as PayPeriod)}
               </span>
               <p className="text-2xl font-bold">
@@ -153,18 +199,24 @@ export default async function JobDetailPage({ params }: { params: Params }) {
               </p>
             </div>
 
+            {faqs.length > 0 && <QuickFaq faqs={faqs} />}
+
+            <div className="border-t" />
+
             {isOwner ? (
-              <div className="space-y-2">
-                {job.is_disabled && (
+              <div className="space-y-3">
+                {job.is_disabled ? (
                   <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
                     {faqs.length < 2
                       ? "Hidden — add at least 2 FAQs to publish this job."
                       : "Hidden — not shown in public listings."}
                   </p>
+                ) : (
+                  <p className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                    <Zap className="h-4 w-4" />
+                    This is your posting
+                  </p>
                 )}
-                <Button asChild className="w-full" variant="outline">
-                  <Link href={`/jobs/${job.id}/edit`}>Edit job</Link>
-                </Button>
                 {faqs.length >= 2 && (
                   <form
                     action={toggleJobVisibility.bind(
@@ -178,15 +230,20 @@ export default async function JobDetailPage({ params }: { params: Params }) {
                     </Button>
                   </form>
                 )}
-                <form action={deleteJob.bind(null, job.id)}>
-                  <Button
-                    type="submit"
-                    variant="destructive"
-                    className="w-full"
-                  >
-                    Delete job
+                <div className="grid grid-cols-2 gap-3">
+                  <Button asChild variant="outline">
+                    <Link href={`/jobs/${job.id}/edit`}>Edit job</Link>
                   </Button>
-                </form>
+                  <form action={deleteJob.bind(null, job.id)}>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      Delete job
+                    </Button>
+                  </form>
+                </div>
               </div>
             ) : user ? (
               <ContactEmployerButton
@@ -210,10 +267,6 @@ export default async function JobDetailPage({ params }: { params: Params }) {
           </div>
         </aside>
       </div>
-
-      <FaqAccordion faqs={faqs} />
-
-      <ReviewsSection reviews={reviews} avg={rAvg} count={rCount} />
     </div>
   );
 }

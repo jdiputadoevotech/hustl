@@ -5,9 +5,15 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Faq } from "@/lib/types/database";
 
-/** Public FAQ list on the job detail page. Multiple rows can be open at once. */
-export function FaqAccordion({ faqs }: { faqs: Faq[] }) {
-  const [open, setOpen] = useState<Set<number>>(new Set());
+/**
+ * Compact FAQ preview for the job sidebar. Shows the first two FAQs; the first
+ * is open by default. "See all FAQs" jumps to the full accordion (#faq-heading).
+ */
+export function QuickFaq({ faqs }: { faqs: Faq[] }) {
+  const preview = faqs.slice(0, 2);
+  const [open, setOpen] = useState<Set<number>>(new Set([0]));
+
+  if (preview.length === 0) return null;
 
   const toggle = (i: number) =>
     setOpen((prev) => {
@@ -17,15 +23,13 @@ export function FaqAccordion({ faqs }: { faqs: Faq[] }) {
       return next;
     });
 
-  if (faqs.length === 0) return null;
-
   return (
-    <section aria-labelledby="faq-heading" className="space-y-4">
-      <h2 id="faq-heading" className="text-2xl font-bold">
-        FAQ
-      </h2>
-      <ul className="divide-y border-y">
-        {faqs.map((faq, i) => {
+    <div className="space-y-1">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Quick FAQ
+      </p>
+      <ul className="divide-y">
+        {preview.map((faq, i) => {
           const isOpen = open.has(i);
           return (
             <li key={i}>
@@ -33,19 +37,17 @@ export function FaqAccordion({ faqs }: { faqs: Faq[] }) {
                 type="button"
                 onClick={() => toggle(i)}
                 aria-expanded={isOpen}
-                className="flex w-full items-center justify-between gap-4 py-4 text-left font-semibold text-foreground transition-colors hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="flex w-full items-center justify-between gap-3 py-3 text-left text-sm font-semibold text-foreground transition-colors hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 {faq.question}
                 <ChevronDown
                   className={cn(
-                    "h-5 w-5 shrink-0 text-muted-foreground transition-transform",
+                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
                     isOpen && "rotate-180",
                   )}
                   aria-hidden
                 />
               </button>
-              {/* Slide: animate the row height via grid-template-rows 0fr→1fr,
-                  no fixed/measured height needed. */}
               <div
                 className={cn(
                   "grid transition-all duration-300 ease-out",
@@ -56,7 +58,7 @@ export function FaqAccordion({ faqs }: { faqs: Faq[] }) {
                 aria-hidden={!isOpen}
               >
                 <div className="overflow-hidden">
-                  <p className="max-w-[70ch] whitespace-pre-wrap pb-5 text-foreground/90">
+                  <p className="whitespace-pre-wrap pb-3 text-sm text-muted-foreground">
                     {faq.answer}
                   </p>
                 </div>
@@ -65,6 +67,14 @@ export function FaqAccordion({ faqs }: { faqs: Faq[] }) {
           );
         })}
       </ul>
-    </section>
+      {faqs.length > preview.length && (
+        <a
+          href="#faq-heading"
+          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+        >
+          See all FAQs ›
+        </a>
+      )}
+    </div>
   );
 }

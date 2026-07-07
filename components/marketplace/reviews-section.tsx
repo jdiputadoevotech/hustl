@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Star } from "lucide-react";
+import { Globe, Star } from "lucide-react";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { StarRating } from "@/components/marketplace/star-rating";
 import type { ReviewItem } from "@/components/marketplace/review-list";
@@ -83,9 +83,14 @@ export function ReviewsSection({
 
   return (
     <section aria-labelledby="reviews-heading" className="space-y-8">
-      <h2 id="reviews-heading" className="text-2xl font-bold">
-        {count} {count === 1 ? "review" : "reviews"}
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 id="reviews-heading" className="text-2xl font-bold">
+          Reviews
+        </h2>
+        <span className="rounded-full bg-muted px-2.5 py-0.5 text-sm font-medium tabular-nums text-muted-foreground">
+          {count}
+        </span>
+      </div>
 
       {/* Summary: aggregate score + distribution */}
       <div className="grid gap-8 sm:grid-cols-[auto_1fr] sm:items-center">
@@ -105,7 +110,7 @@ export function ReviewsSection({
           {buckets.map(({ stars, n }) => (
             <li key={stars} className="flex items-center gap-3 text-sm">
               <span className="flex w-12 shrink-0 items-center gap-1 text-muted-foreground">
-                {stars}
+                <span className="w-2 text-right tabular-nums">{stars}</span>
                 <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
               </span>
               <span
@@ -129,7 +134,7 @@ export function ReviewsSection({
       {/* Controls */}
       <div className="flex items-center justify-between border-b pb-3">
         <span className="text-sm font-medium">
-          {count === 1 ? "1 review" : `${count} reviews`}
+          Showing {count} {count === 1 ? "review" : "reviews"}
         </span>
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           Sort by
@@ -148,34 +153,46 @@ export function ReviewsSection({
       </div>
 
       {/* List */}
-      <ul className="divide-y">
+      <ul className="space-y-4">
         {visible.map((r) => (
-          <li key={r.id} className="py-5 first:pt-0 space-y-2.5">
+          <li key={r.id} className="rounded-xl border bg-card p-5">
+            {/* Profile + location */}
             <div className="flex items-center gap-3">
               <AvatarInitials
                 name={r.reviewer_name}
-                className="h-9 w-9 text-sm"
+                className="h-10 w-10 text-sm"
               />
               <div className="min-w-0">
-                <p className="truncate font-medium leading-tight">
+                <p className="truncate font-semibold leading-tight">
                   {r.reviewer_name ?? "Carolinian"}
                 </p>
-                <div className="flex items-center gap-2">
-                  <StarRating
-                    average={r.rating}
-                    count={1}
-                    compact={false}
-                    starsOnly
-                    className="gap-0"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {timeAgo(r.created_at)}
-                  </span>
-                </div>
+                <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                  <Globe className="h-3 w-3" aria-hidden />
+                  Unknown
+                </span>
               </div>
             </div>
+
+            <hr className="my-4 border-border" />
+
+            {/* Rating + time */}
+            <div className="flex items-center gap-2 text-sm">
+              <StarRating
+                average={r.rating}
+                count={1}
+                compact={false}
+                starsOnly
+                className="gap-0"
+              />
+              <span className="font-semibold tabular-nums">{r.rating}</span>
+              <span className="text-muted-foreground">•</span>
+              <span className="text-muted-foreground">
+                {timeAgo(r.created_at)}
+              </span>
+            </div>
+
             {r.comment && (
-              <p className="max-w-[70ch] whitespace-pre-wrap text-[0.95rem] leading-relaxed text-foreground/90">
+              <p className="mt-3 whitespace-pre-wrap text-[0.95rem] leading-relaxed text-foreground/90">
                 {r.comment}
               </p>
             )}

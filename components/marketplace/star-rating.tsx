@@ -53,7 +53,7 @@ export function StarRating({
           <Star
             key={i}
             className={cn(
-              "h-5 w-5",
+              "h-3.5 w-3.5",
               i <= rounded
                 ? "fill-amber-500 text-amber-500"
                 : "text-muted-foreground/40",
@@ -63,7 +63,9 @@ export function StarRating({
       </span>
       {!starsOnly && (
         <span className="text-sm text-muted-foreground" aria-hidden>
-          {count > 0 ? `${average.toFixed(1)} (${count})` : "No reviews yet"}
+          {count > 0
+            ? `${average.toFixed(1)} (${count} ${count === 1 ? "rating" : "ratings"})`
+            : "No reviews yet"}
         </span>
       )}
     </span>

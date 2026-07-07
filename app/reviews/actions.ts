@@ -22,7 +22,7 @@ export async function submitReview(contractId: string, formData: FormData) {
   const supabase = await createClient();
   const { data: contract } = await supabase
     .from("contracts")
-    .select("id, employer_id, student_id, job_id, status")
+    .select("id, employer_id, student_id, status")
     .eq("id", contractId)
     .single();
 
@@ -39,7 +39,6 @@ export async function submitReview(contractId: string, formData: FormData) {
       contract_id: contractId,
       employer_id: contract.employer_id,
       reviewer_id: user.id,
-      job_id: contract.job_id,
       rating,
       comment: String(formData.get("comment") ?? "").trim() || null,
       updated_at: new Date().toISOString(),
