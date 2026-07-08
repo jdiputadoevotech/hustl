@@ -107,6 +107,14 @@ export interface Contract {
   updated_at: string; // timestamptz
 }
 
+/** A job a student bookmarked for later. One row per (student, job). */
+export interface SavedJob {
+  id: string; // uuid
+  student_id: string; // uuid, FK -> profiles.id
+  job_id: string; // uuid, FK -> jobs.id
+  created_at: string; // timestamptz
+}
+
 /**
  * A 1–5 star review left by a student for an employer after a contract
  * Completes. One per contract; eligibility enforced by RLS. See SETUP.md.

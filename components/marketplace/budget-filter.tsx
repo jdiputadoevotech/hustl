@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
@@ -15,13 +15,14 @@ import { Input } from "@/components/ui/input";
 export function BudgetFilter({ max }: { max?: string }) {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(max ?? "");
 
   // Radix DropdownMenu handles open coordination (only one filter open at a time)
   // via its shared dismissable layer.
   const push = (next: URLSearchParams) => {
-    router.push(`/jobs?${next.toString()}`);
+    router.push(`${pathname}?${next.toString()}`);
     setOpen(false);
   };
 

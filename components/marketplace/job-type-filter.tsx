@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
@@ -17,12 +17,13 @@ const TYPES: JobType[] = ["gig", "part-time", "full-time"];
 export function JobTypeFilter({ selected }: { selected?: string }) {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
 
   const go = (type: string | null) => {
     const next = new URLSearchParams(params.toString());
     if (type) next.set("type", type);
     else next.delete("type");
-    router.push(`/jobs?${next.toString()}`);
+    router.push(`${pathname}?${next.toString()}`);
   };
 
   const label =

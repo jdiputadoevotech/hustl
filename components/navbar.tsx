@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, Bookmark } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { hasEnvVars } from "@/lib/utils";
@@ -15,14 +15,16 @@ export async function Navbar() {
   const user = hasEnvVars ? await getCurrentUser() : null;
 
   let displayName = "";
+  let isStudent = false;
   if (user) {
     const supabase = await createClient();
     const { data: profile } = await supabase
       .from("profiles")
-      .select("full_name")
+      .select("full_name, role")
       .eq("id", user.id)
       .single();
     displayName = profile?.full_name || user.email.split("@")[0];
+    isStudent = profile?.role === "student";
   }
 
   return (
@@ -74,6 +76,16 @@ export async function Navbar() {
               >
                 Dashboard
               </Link>
+              {isStudent && (
+                <Link
+                  href="/saved"
+                  aria-label="Saved jobs"
+                  title="Saved jobs"
+                  className="text-foreground/80 hover:text-foreground"
+                >
+                  <Bookmark className="h-5 w-5" />
+                </Link>
+              )}
               <UserMenu userId={user.id} name={displayName} />
             </>
           ) : (

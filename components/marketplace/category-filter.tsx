@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { GIG_CATEGORIES } from "@/lib/categories";
 import {
@@ -14,12 +14,13 @@ import {
 export function CategoryFilter({ selected }: { selected?: string }) {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
 
   const go = (category: string | null) => {
     const next = new URLSearchParams(params.toString());
     if (category) next.set("category", category);
     else next.delete("category");
-    router.push(`/jobs?${next.toString()}`);
+    router.push(`${pathname}?${next.toString()}`);
   };
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
@@ -20,6 +20,7 @@ export type SortValue = (typeof SORT_OPTIONS)[number]["value"];
 export function SortDropdown({ selected }: { selected: SortValue }) {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
 
   const current =
     SORT_OPTIONS.find((o) => o.value === selected) ?? SORT_OPTIONS[0];
@@ -27,7 +28,7 @@ export function SortDropdown({ selected }: { selected: SortValue }) {
   const go = (value: string) => {
     const next = new URLSearchParams(params.toString());
     next.set("sort", value);
-    router.push(`/jobs?${next.toString()}`);
+    router.push(`${pathname}?${next.toString()}`);
   };
 
   return (

@@ -83,6 +83,7 @@ signup trigger, and the `jobs_with_employer` view.
 -- 1. Drop old views + tables (CASCADE removes dependent objects/policies).
 drop view  if exists public.gigs_with_ratings;
 drop view  if exists public.jobs_with_employer;
+drop table if exists public.saved_jobs cascade;
 drop table if exists public.reviews   cascade;
 drop table if exists public.orders    cascade;
 drop table if exists public.gigs      cascade;
@@ -184,12 +185,24 @@ create table public.reviews (
 );
 
 -- ============================================================
+-- SAVED_JOBS — a student bookmarks a job to revisit later
+-- ============================================================
+create table public.saved_jobs (
+  id          uuid primary key default gen_random_uuid(),
+  student_id  uuid not null references public.profiles (id) on delete cascade,
+  job_id      uuid not null references public.jobs (id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  unique (student_id, job_id)   -- a job is saved at most once per student
+);
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
-alter table public.profiles  enable row level security;
-alter table public.jobs      enable row level security;
-alter table public.contracts enable row level security;
-alter table public.reviews   enable row level security;
+alter table public.profiles   enable row level security;
+alter table public.jobs       enable row level security;
+alter table public.contracts  enable row level security;
+alter table public.reviews    enable row level security;
+alter table public.saved_jobs enable row level security;
 
 -- ---------- PROFILES ----------
 drop policy if exists "Profiles are viewable by everyone" on public.profiles;
@@ -290,6 +303,27 @@ create policy "Reviewers can update their own review"
 drop policy if exists "Reviewers can delete their own review" on public.reviews;
 create policy "Reviewers can delete their own review"
   on public.reviews for delete using (reviewer_id = auth.uid());
+
+-- ---------- SAVED_JOBS ----------
+-- Private to the owner: a student only ever sees/manages their own bookmarks.
+drop policy if exists "Students can view their saved jobs" on public.saved_jobs;
+create policy "Students can view their saved jobs"
+  on public.saved_jobs for select using (auth.uid() = student_id);
+
+-- Only a student may bookmark, as themselves.
+drop policy if exists "Students can save jobs" on public.saved_jobs;
+create policy "Students can save jobs"
+  on public.saved_jobs for insert with check (
+    student_id = auth.uid()
+    and exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.role = 'student'
+    )
+  );
+
+drop policy if exists "Students can unsave their jobs" on public.saved_jobs;
+create policy "Students can unsave their jobs"
+  on public.saved_jobs for delete using (auth.uid() = student_id);
 
 -- ============================================================
 -- AUTO-CREATE PROFILE ON SIGNUP
@@ -494,6 +528,41 @@ create policy "Contracts visible to the parties"
       where p.id = contracts.student_id and p.contracts_hidden = false
     )
   );
+```
+
+### Already ran the Fresh Migration? Add the `saved_jobs` bookmarks table
+
+Adds the student bookmark table + its owner-only RLS (insert gated to
+`role = 'student'`). Idempotent.
+
+```sql
+create table if not exists public.saved_jobs (
+  id          uuid primary key default gen_random_uuid(),
+  student_id  uuid not null references public.profiles (id) on delete cascade,
+  job_id      uuid not null references public.jobs (id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  unique (student_id, job_id)
+);
+
+alter table public.saved_jobs enable row level security;
+
+drop policy if exists "Students can view their saved jobs" on public.saved_jobs;
+create policy "Students can view their saved jobs"
+  on public.saved_jobs for select using (auth.uid() = student_id);
+
+drop policy if exists "Students can save jobs" on public.saved_jobs;
+create policy "Students can save jobs"
+  on public.saved_jobs for insert with check (
+    student_id = auth.uid()
+    and exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.role = 'student'
+    )
+  );
+
+drop policy if exists "Students can unsave their jobs" on public.saved_jobs;
+create policy "Students can unsave their jobs"
+  on public.saved_jobs for delete using (auth.uid() = student_id);
 ```
 
 ---

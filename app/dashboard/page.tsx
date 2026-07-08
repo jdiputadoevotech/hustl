@@ -37,36 +37,51 @@ export default async function DashboardPage({
 
   const supabase = await createClient();
 
-  // Jobs I posted (for the offer form + my listings).
-  const { data: myJobs } = await supabase
-    .from("jobs")
-    .select("id, title, job_type")
-    .eq("employer_id", user.id)
-    .order("created_at", { ascending: false });
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  const isEmployer = me?.role === "employer";
 
-  // Contracts where I'm the student (incoming offers + my work).
-  const { data: myContracts } = await supabase
-    .from("contracts")
-    .select(
-      "id, status, created_at, job:jobs ( id, title ), employer:profiles!contracts_employer_id_fkey ( id, full_name )",
-    )
-    .eq("student_id", user.id)
-    .order("created_at", { ascending: false });
+  // Employers hire; students get hired. Fetch only what this role's view uses.
+  const { data: myJobs } = isEmployer
+    ? await supabase
+        .from("jobs")
+        .select("id, title, job_type")
+        .eq("employer_id", user.id)
+        .order("created_at", { ascending: false })
+    : { data: null };
 
   // Contracts I sent as an employer.
-  const { data: sentContracts } = await supabase
-    .from("contracts")
-    .select(
-      "id, status, created_at, job:jobs ( id, title ), student:profiles!contracts_student_id_fkey ( id, full_name )",
-    )
-    .eq("employer_id", user.id)
-    .order("created_at", { ascending: false });
+  const { data: sentContracts } = isEmployer
+    ? await supabase
+        .from("contracts")
+        .select(
+          "id, status, created_at, job:jobs ( id, title ), student:profiles!contracts_student_id_fkey ( id, full_name )",
+        )
+        .eq("employer_id", user.id)
+        .order("created_at", { ascending: false })
+    : { data: null };
+
+  // Contracts where I'm the student (incoming offers + my work).
+  const { data: myContracts } = isEmployer
+    ? { data: null }
+    : await supabase
+        .from("contracts")
+        .select(
+          "id, status, created_at, job:jobs ( id, title ), employer:profiles!contracts_employer_id_fkey ( id, full_name )",
+        )
+        .eq("student_id", user.id)
+        .order("created_at", { ascending: false });
 
   // My existing reviews (to prefill the review form on completed contracts).
-  const { data: myReviews } = await supabase
-    .from("reviews")
-    .select("contract_id, rating, comment")
-    .eq("reviewer_id", user.id);
+  const { data: myReviews } = isEmployer
+    ? { data: null }
+    : await supabase
+        .from("reviews")
+        .select("contract_id, rating, comment")
+        .eq("reviewer_id", user.id);
   const reviewByContract = new Map(
     (myReviews ?? []).map((r) => [
       r.contract_id,
@@ -79,9 +94,11 @@ export default async function DashboardPage({
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <div className="flex gap-2">
-          <Button asChild size="sm">
-            <Link href="/jobs/new">Post a job</Link>
-          </Button>
+          {isEmployer && (
+            <Button asChild size="sm">
+              <Link href="/jobs/new">Post a job</Link>
+            </Button>
+          )}
           <Button asChild variant="outline" size="sm">
             <Link href="/profile/edit">Edit profile</Link>
           </Button>
@@ -107,6 +124,7 @@ export default async function DashboardPage({
       )}
 
       {/* ===================== AS A STUDENT ===================== */}
+      {!isEmployer && (
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">My offers & work</h2>
         {!myContracts || myContracts.length === 0 ? (
@@ -196,8 +214,10 @@ export default async function DashboardPage({
           </ul>
         )}
       </section>
+      )}
 
       {/* ===================== AS AN EMPLOYER ===================== */}
+      {isEmployer && (
       <section className="space-y-6">
         <h2 className="text-lg font-semibold">Hiring</h2>
 
@@ -345,6 +365,7 @@ export default async function DashboardPage({
           )}
         </div>
       </section>
+      )}
     </div>
   );
 }

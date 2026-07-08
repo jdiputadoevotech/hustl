@@ -7,6 +7,7 @@ import {
   JobTypeBadge,
   JOB_TYPE_BANNER_STYLE,
 } from "@/components/marketplace/job-type-badge";
+import { SaveJobButton } from "@/components/marketplace/save-job-button";
 import { formatPay } from "@/lib/pay";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -35,7 +36,15 @@ type JobCardData = Pick<
 };
 
 /** Job board card: colored type banner, employer row, title, rating, pay. */
-export function JobCard({ job }: { job: JobCardData }) {
+export function JobCard({
+  job,
+  canSave = false,
+  saved = false,
+}: {
+  job: JobCardData;
+  canSave?: boolean;
+  saved?: boolean;
+}) {
   const poster =
     job.employer_establishment_name || job.employer_name || "An employer";
   const skills = job.skills ?? [];
@@ -46,13 +55,16 @@ export function JobCard({ job }: { job: JobCardData }) {
         {/* Title banner (replaces a cover image) */}
         <div
           className={cn(
-            "h-24 flex items-center justify-center p-3",
+            "relative h-24 flex items-center justify-center p-3",
             JOB_TYPE_BANNER_STYLE[job.job_type],
           )}
         >
           <p className="text-white font-semibold text-center leading-snug line-clamp-3">
             {job.title}
           </p>
+          {canSave && (
+            <SaveJobButton jobId={job.id} initialSaved={saved} variant="icon" />
+          )}
         </div>
 
         <div className="p-3 space-y-2 flex-1 flex flex-col">

@@ -10,6 +10,7 @@ import { StarRating } from "@/components/marketplace/star-rating";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { JobTypeBadge } from "@/components/marketplace/job-type-badge";
 import { ContactEmployerButton } from "@/components/marketplace/contact-employer-button";
+import { SaveJobButton } from "@/components/marketplace/save-job-button";
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
 import { FaqAccordion } from "@/components/marketplace/faq-accordion";
 import { QuickFaq } from "@/components/marketplace/quick-faq";
@@ -67,6 +68,27 @@ export default async function JobDetailPage({ params }: { params: Params }) {
 
   const user = await getCurrentUser();
   const isOwner = user?.id === job.employer_id;
+
+  // Student viewers get a bookmark button; fetch role + whether this job is saved.
+  let isStudent = false;
+  let isSaved = false;
+  if (user && !isOwner) {
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    isStudent = me?.role === "student";
+    if (isStudent) {
+      const { data: saved } = await supabase
+        .from("saved_jobs")
+        .select("id")
+        .eq("student_id", user.id)
+        .eq("job_id", job.id)
+        .maybeSingle();
+      isSaved = !!saved;
+    }
+  }
 
   // Hidden jobs (draft or <2 FAQs) are owner-only; the public gets a 404.
   if (job.is_disabled && !isOwner) notFound();
@@ -247,14 +269,19 @@ export default async function JobDetailPage({ params }: { params: Params }) {
                 </div>
               </div>
             ) : user ? (
-              <ContactEmployerButton
-                jobId={job.id}
-                jobTitle={job.title}
-                jobType={jobType}
-                employerName={employer?.full_name ?? "there"}
-                employerHandle={employer?.messenger_username ?? null}
-                studentEmail={user.email}
-              />
+              <div className="space-y-3">
+                <ContactEmployerButton
+                  jobId={job.id}
+                  jobTitle={job.title}
+                  jobType={jobType}
+                  employerName={employer?.full_name ?? "there"}
+                  employerHandle={employer?.messenger_username ?? null}
+                  studentEmail={user.email}
+                />
+                {isStudent && (
+                  <SaveJobButton jobId={job.id} initialSaved={isSaved} />
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
                 <Button asChild className="w-full">
