@@ -64,6 +64,25 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // First-run onboarding: non-.edu users must pick student/employer once. The
+  // flag lives in JWT user_metadata (set by completeOnboarding), so no DB query
+  // here. .edu users are auto-students and exempt — the .edu test mirrors
+  // canBecomeEmployer() in lib/auth.ts (kept inline; that module pulls in the
+  // server client, which can't be imported into the proxy runtime).
+  const email = (user?.email as string) ?? "";
+  const onboarded = Boolean(
+    (user?.user_metadata as Record<string, unknown> | undefined)?.onboarded,
+  );
+  const onboardingExempt =
+    pathname.startsWith("/onboarding") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api");
+  if (user && !onboarded && !/\.edu(\.|$)/i.test(email) && !onboardingExempt) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/onboarding";
+    return NextResponse.redirect(url);
+  }
+
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:
   // 1. Pass the request in it, like so:

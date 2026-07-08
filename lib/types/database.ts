@@ -121,9 +121,9 @@ export interface SavedJob {
  */
 export interface Review {
   id: string; // uuid
-  contract_id: string; // uuid, FK -> contracts.id
+  contract_id: string | null; // uuid, FK -> contracts.id; null once the contract is deleted
   employer_id: string; // uuid, FK -> profiles.id (reviewee)
-  reviewer_id: string; // uuid, FK -> profiles.id (the student)
+  reviewer_id: string | null; // uuid, FK -> profiles.id (the student); null once they delete their account
   rating: number; // 1..5
   comment: string | null;
   created_at: string; // timestamptz

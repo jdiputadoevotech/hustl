@@ -171,17 +171,22 @@ create table public.contracts (
 
 -- ============================================================
 -- REVIEWS — a student rates the EMPLOYER after a contract Completes
+-- reviewer_id / contract_id are ON DELETE SET NULL (not cascade): when the
+-- reviewing student deletes their account (or the contract is removed) the
+-- review row SURVIVES so the employer's rating history stays intact. A null
+-- reviewer_id renders as "Deleted user". A review about a deleted EMPLOYER
+-- still cascade-deletes (employer_id), since their profile/rating is gone.
 -- ============================================================
 create table public.reviews (
   id          uuid primary key default gen_random_uuid(),
-  contract_id uuid not null references public.contracts (id) on delete cascade,
+  contract_id uuid references public.contracts (id) on delete set null,
   employer_id uuid not null references public.profiles (id) on delete cascade, -- reviewee
-  reviewer_id uuid not null references public.profiles (id) on delete cascade, -- the student
+  reviewer_id uuid references public.profiles (id) on delete set null, -- the student; null once they delete their account
   rating      int  not null check (rating between 1 and 5),
   comment     text,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
-  unique (contract_id)          -- one review per completed contract
+  unique (contract_id)          -- one review per completed contract (nulls are distinct)
 );
 
 -- ============================================================
@@ -563,6 +568,28 @@ create policy "Students can save jobs"
 drop policy if exists "Students can unsave their jobs" on public.saved_jobs;
 create policy "Students can unsave their jobs"
   on public.saved_jobs for delete using (auth.uid() = student_id);
+```
+
+### Already ran the Fresh Migration? Preserve reviews when a reviewer deletes
+
+Keeps an employer's rating history intact after the reviewing student deletes
+their account: the review detaches instead of cascade-deleting. `reviewer_id`
+and `contract_id` become nullable + `ON DELETE SET NULL`; a null reviewer renders
+as "Deleted user". Idempotent.
+
+```sql
+alter table public.reviews alter column reviewer_id drop not null;
+alter table public.reviews alter column contract_id drop not null;
+
+alter table public.reviews drop constraint if exists reviews_reviewer_id_fkey;
+alter table public.reviews
+  add constraint reviews_reviewer_id_fkey
+  foreign key (reviewer_id) references public.profiles (id) on delete set null;
+
+alter table public.reviews drop constraint if exists reviews_contract_id_fkey;
+alter table public.reviews
+  add constraint reviews_contract_id_fkey
+  foreign key (contract_id) references public.contracts (id) on delete set null;
 ```
 
 ---

@@ -95,7 +95,7 @@ export default async function ProfilePage({
     const { data: reviewsRaw } = await supabase
       .from("reviews")
       .select(
-        "id, rating, comment, created_at, profiles:reviewer_id ( full_name )",
+        "id, rating, comment, created_at, reviewer_id, profiles:reviewer_id ( full_name )",
       )
       .eq("employer_id", id)
       .order("created_at", { ascending: false });
@@ -104,9 +104,11 @@ export default async function ProfilePage({
       rating: r.rating,
       comment: r.comment,
       created_at: r.created_at,
-      reviewer_name:
-        (r.profiles as unknown as { full_name: string | null } | null)
-          ?.full_name ?? null,
+      // reviewer_id is null once the reviewing student deletes their account.
+      reviewer_name: r.reviewer_id
+        ? ((r.profiles as unknown as { full_name: string | null } | null)
+            ?.full_name ?? null)
+        : "Deleted user",
     }));
   } else {
     // Contracts are RLS-gated: parties always see them; others only when the

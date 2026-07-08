@@ -253,15 +253,15 @@ export default async function EditProfilePage({
               Danger zone
             </h2>
             <p className="text-xs text-muted-foreground">
-              Deletes your profile and all your jobs and contracts. This cannot
-              be undone.
+              Deletes your profile, jobs, and contracts. Reviews you wrote stay
+              up as &ldquo;Deleted user.&rdquo; This cannot be undone.
             </p>
           </div>
           <ConfirmSubmit
             action={deleteAccount}
             label="Delete account"
             confirmTitle="Delete your account?"
-            confirmBody="This permanently deletes your profile and all your jobs and contracts. This cannot be undone."
+            confirmBody="This permanently deletes your profile, your job posts, and your contracts. Reviews you've written stay visible but show as from a deleted user. You can't delete while you have active or pending contracts. This cannot be undone."
             size="sm"
           />
         </CardContent>

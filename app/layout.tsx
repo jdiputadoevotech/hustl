@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
+import { SiteShell } from "@/components/site-shell";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -29,13 +30,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.className} antialiased`}>
-        <Navbar />
-        <main className="min-h-screen w-full">
-          <div className="mx-auto w-full max-w-[1400px] px-6 lg:px-8 py-8">
-            {children}
-          </div>
-        </main>
-        <Footer />
+        <SiteShell navbar={<Navbar />} footer={<Footer />}>
+          {children}
+        </SiteShell>
       </body>
     </html>
   );
