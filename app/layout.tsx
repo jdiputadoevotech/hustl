@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { Navbar } from "@/components/navbar";
+import { AdminNav } from "@/components/admin-nav";
 import { Footer } from "@/components/footer";
 import { SiteShell } from "@/components/site-shell";
 import "./globals.css";
@@ -30,7 +31,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.className} antialiased`}>
-        <SiteShell navbar={<Navbar />} footer={<Footer />}>
+        <SiteShell
+          navbar={<Navbar />}
+          adminNav={<AdminNav />}
+          footer={<Footer />}
+        >
           {children}
         </SiteShell>
       </body>

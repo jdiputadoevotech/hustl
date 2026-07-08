@@ -8,9 +8,11 @@ import {
   Facebook,
   Instagram,
   Linkedin,
+  BadgeCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, canBecomeEmployer } from "@/lib/auth";
+import { requestVerification } from "@/app/profile/actions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
@@ -23,7 +25,12 @@ import {
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
 import { FormError } from "@/components/marketplace/form-error";
 import { monthYear } from "@/lib/time";
-import type { ContractStatus, Role, Socials } from "@/lib/types/database";
+import type {
+  ContractStatus,
+  Role,
+  Socials,
+  VerificationStatus,
+} from "@/lib/types/database";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{ error?: string }>;
@@ -60,7 +67,7 @@ export default async function ProfilePage({
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, bio, skills, messenger_username, establishment_name, establishment_description, website_url, socials, contracts_hidden, created_at",
+      "id, full_name, role, bio, skills, messenger_username, establishment_name, establishment_description, website_url, socials, contracts_hidden, verification_status, created_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -73,6 +80,8 @@ export default async function ProfilePage({
   const role = (profile.role ?? "student") as Role;
   const isEmployer = role === "employer";
   const socials = (profile.socials ?? {}) as Socials;
+  const vStatus = (profile.verification_status ?? "none") as VerificationStatus;
+  const isVerified = vStatus === "verified";
 
   // Employer: posted jobs + reviews received. Student: contracts + reviews made.
   type ProfileJobCard = Parameters<typeof JobCard>[0]["job"];
@@ -85,7 +94,7 @@ export default async function ProfilePage({
     const { data } = await supabase
       .from("jobs_with_employer")
       .select(
-        "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_rating_avg, employer_rating_count",
+        "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_verification_status, employer_rating_avg, employer_rating_count",
       )
       .eq("employer_id", id)
       .eq("is_disabled", false) // public profile shows only listed jobs
@@ -181,8 +190,14 @@ export default async function ProfilePage({
           />
           <div className="space-y-3 min-w-0">
             <div className="space-y-1.5">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+              <h1 className="flex items-center gap-2 text-2xl sm:text-3xl font-bold tracking-tight">
                 {profile.full_name ?? "Carolinian"}
+                {isVerified && (
+                  <BadgeCheck
+                    className="h-6 w-6 shrink-0 text-emerald-600 dark:text-emerald-400"
+                    aria-label="Verified account"
+                  />
+                )}
               </h1>
               {isEmployer && <StarRating average={rAvg} count={rCount} />}
             </div>
@@ -396,39 +411,55 @@ export default async function ProfilePage({
             </div>
 
             {isOwner && (
-              <div className="rounded-xl border bg-emerald-50/50 p-6 space-y-3 dark:bg-emerald-950/20">
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                    Verification status
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {isEmployer
-                      ? "Verify your account to build trust with applicants."
-                      : "Post jobs and hire students by becoming an employer."}
-                  </p>
-                </div>
-                {isEmployer ? (
-                  // ponytail: cosmetic until admin pages exist (user-confirmed).
-                  <Button className="w-full" disabled>
-                    Get Verified
-                  </Button>
-                ) : canUpgrade ? (
-                  <Button asChild className="w-full">
-                    <Link href="/profile/edit?upgrade=1">
-                      Become an employer
-                    </Link>
-                  </Button>
-                ) : (
-                  <div className="space-y-2">
-                    <Button className="w-full" disabled>
-                      Become an employer
-                    </Button>
-                    <p className="text-xs text-muted-foreground">
-                      Student (.edu) emails can&apos;t become employers.
-                    </p>
+              <>
+                {vStatus !== "verified" && (
+                  <div className="rounded-xl border bg-emerald-50/50 p-6 space-y-3 dark:bg-emerald-950/20">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                        Verification status
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {vStatus === "pending"
+                          ? "Your verification request is under review. We'll add a badge to your profile once it's approved."
+                          : vStatus === "rejected"
+                            ? "Your last request wasn't approved. You can request verification again."
+                            : isEmployer
+                              ? "Verify your account to build trust with applicants."
+                              : "Verify your account to build trust with employers."}
+                      </p>
+                    </div>
+                    {vStatus === "pending" ? (
+                      <Button className="w-full" disabled>
+                        Pending review
+                      </Button>
+                    ) : (
+                      <form action={requestVerification}>
+                        <Button type="submit" className="w-full">
+                          {vStatus === "rejected"
+                            ? "Request again"
+                            : "Get Verified"}
+                        </Button>
+                      </form>
+                    )}
                   </div>
                 )}
-              </div>
+
+                {!isEmployer && canUpgrade && (
+                  <div className="rounded-xl border bg-background p-6 space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold">Become an employer</p>
+                      <p className="text-sm text-muted-foreground">
+                        Post jobs and hire students by upgrading your account.
+                      </p>
+                    </div>
+                    <Button asChild className="w-full">
+                      <Link href="/profile/edit?upgrade=1">
+                        Become an employer
+                      </Link>
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </aside>

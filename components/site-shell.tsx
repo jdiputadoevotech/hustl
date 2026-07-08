@@ -12,10 +12,12 @@ import { usePathname } from "next/navigation";
  */
 export function SiteShell({
   navbar,
+  adminNav,
   footer,
   children,
 }: {
   navbar: React.ReactNode;
+  adminNav: React.ReactNode;
   footer: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -28,6 +30,7 @@ export function SiteShell({
   return (
     <>
       {navbar}
+      {adminNav}
       <main className="min-h-screen w-full">
         <div className="mx-auto w-full max-w-[1400px] px-6 lg:px-8 py-8">
           {children}

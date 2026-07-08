@@ -1,0 +1,139 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/auth";
+import type { Role } from "@/lib/types/database";
+
+// All admin mutations: verify caller is admin, then write through the
+// service-role client (bypasses RLS + satisfies the profiles guard trigger).
+// Errors surface via ?error= on the originating page, matching the app-wide
+// redirect convention.
+
+function fail(path: string, message: string): never {
+  redirect(`${path}?error=${encodeURIComponent(message)}`);
+}
+
+// ---------- Users ----------
+
+export async function setUserRole(id: string, role: Role) {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ role, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) fail("/admin/users", error.message);
+  revalidatePath("/admin/users");
+  redirect("/admin/users");
+}
+
+/** Promote an existing user to admin by email (Admins tab "Add admin"). */
+export async function addAdminByEmail(formData: FormData) {
+  await requireAdmin();
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) fail("/admin/users?tab=admins", "Enter an email.");
+
+  const supabase = await createClient();
+  // Reuse the existing SECURITY DEFINER helper that maps email -> user id.
+  const { data: id, error: lookupError } = await supabase.rpc(
+    "lookup_user_by_email",
+    { p_email: email },
+  );
+  if (lookupError) fail("/admin/users?tab=admins", lookupError.message);
+  if (!id) fail("/admin/users?tab=admins", `No user found for ${email}.`);
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ role: "admin", updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) fail("/admin/users?tab=admins", error.message);
+  revalidatePath("/admin/users");
+  redirect("/admin/users?tab=admins");
+}
+
+export async function setUserArchived(id: string, archived: boolean) {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ archived, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) fail("/admin/users", error.message);
+  revalidatePath("/admin/users");
+  redirect(`/admin/users?tab=${archived ? "archived" : "active"}`);
+}
+
+/**
+ * Permanently deletes a user: removes the auth.users row, which cascades to
+ * their profile, jobs, contracts, and saved jobs (reviews they wrote survive
+ * with reviewer_id nulled). Blocked while either party has a live contract, so
+ * a counterparty never loses in-flight work — same guard as self-deletion.
+ */
+export async function deleteUser(id: string) {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const { data: live } = await supabase
+    .from("contracts")
+    .select("id")
+    .in("status", ["Offered", "Accepted"])
+    .or(`employer_id.eq.${id},student_id.eq.${id}`)
+    .limit(1);
+  if (live && live.length > 0) {
+    fail(
+      "/admin/users",
+      "This user has active or pending contracts. Resolve them before deleting.",
+    );
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) fail("/admin/users", error.message);
+  revalidatePath("/admin/users");
+  redirect("/admin/users");
+}
+
+// ---------- Jobs ----------
+
+export async function setJobHidden(id: string, hidden: boolean) {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("jobs")
+    .update({ is_disabled: hidden, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) fail("/admin/jobs", error.message);
+  revalidatePath("/admin/jobs");
+  redirect(`/admin/jobs?tab=${hidden ? "hidden" : "active"}`);
+}
+
+export async function deleteJob(id: string) {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { error } = await admin.from("jobs").delete().eq("id", id);
+  if (error) fail("/admin/jobs", error.message);
+  revalidatePath("/admin/jobs");
+  redirect("/admin/jobs");
+}
+
+// ---------- Verification ----------
+
+export async function setVerification(
+  id: string,
+  status: "verified" | "rejected",
+) {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ verification_status: status, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) fail("/admin/verification", error.message);
+  revalidatePath("/admin/verification");
+  revalidatePath(`/profile/${id}`);
+  redirect("/admin/verification");
+}

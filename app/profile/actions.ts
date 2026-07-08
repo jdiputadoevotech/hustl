@@ -79,6 +79,32 @@ export async function updateProfile(formData: FormData) {
 }
 
 /**
+ * Requests account verification: flips the caller's own verification_status to
+ * 'pending' for an admin to review. Allowed on the normal (RLS) client because
+ * the profiles_guard_admin_fields trigger permits the owner to move to 'pending'
+ * — only 'verified'/'rejected' are service-role-only. No-op if already pending
+ * or verified.
+ */
+export async function requestVerification() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth/login");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ verification_status: "pending", updated_at: new Date().toISOString() })
+    .eq("id", user.id)
+    .not("verification_status", "in", "(pending,verified)");
+
+  if (error) {
+    redirect(`/profile/${user.id}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath(`/profile/${user.id}`);
+  redirect(`/profile/${user.id}`);
+}
+
+/**
  * Permanently deletes the user's account. Uses the service-role admin client to
  * delete the auth.users record, which cascades to profiles and everything the
  * profile owns (jobs, contracts, saved jobs). Reviews the user *wrote* are kept

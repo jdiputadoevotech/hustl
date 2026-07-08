@@ -37,7 +37,7 @@ export default async function JobsPage({
   let query = supabase
     .from("jobs_with_employer")
     .select(
-      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_rating_avg, employer_rating_count",
+      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_verification_status, employer_rating_avg, employer_rating_count",
     );
 
   query = query.eq("is_disabled", false); // hide drafts / incomplete jobs
@@ -149,6 +149,7 @@ export default async function JobsPage({
                 created_at: j.created_at,
                 employer_name: j.employer_name,
                 employer_establishment_name: j.employer_establishment_name,
+                employer_verification_status: j.employer_verification_status,
                 employer_rating_avg: j.employer_rating_avg,
                 employer_rating_count: j.employer_rating_count,
               }}

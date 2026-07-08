@@ -55,6 +55,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/jobs") ||
     pathname.startsWith("/profile") ||
     pathname.startsWith("/login") ||
+    pathname.startsWith("/suspended") ||
     pathname.startsWith("/auth");
 
   if (!isPublic && !user) {
@@ -62,6 +63,26 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     return NextResponse.redirect(url);
+  }
+
+  // Archive lockout: an admin-archived user is hard-blocked. Re-checked on every
+  // request so an active session dies immediately (not just at next login). One
+  // extra DB read per authenticated request — acceptable for a hard security
+  // lock; promote to a JWT claim if it ever shows up in latency.
+  // ponytail: per-request query, upgrade path is a JWT claim.
+  if (user && !pathname.startsWith("/suspended") && !pathname.startsWith("/auth")) {
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("archived")
+      .eq("id", user.sub as string)
+      .single();
+    if (me?.archived) {
+      await supabase.auth.signOut();
+      const url = request.nextUrl.clone();
+      url.pathname = "/suspended";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   // First-run onboarding: non-.edu users must pick student/employer once. The

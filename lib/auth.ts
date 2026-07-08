@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 /** The subset of JWT claims Hustl relies on. */
@@ -25,4 +26,23 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
  */
 export function canBecomeEmployer(email: string): boolean {
   return !/\.edu(\.|$)/i.test(email);
+}
+
+/**
+ * Guard for admin-only server code (the /admin layout + every admin action).
+ * Redirects non-admins to "/" so a leaked route or forged request still can't
+ * act. Returns the admin's CurrentUser on success. The nav only *hides* admin
+ * links — this is the real enforcement (there is no admin RLS).
+ */
+export async function requireAdmin(): Promise<CurrentUser> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth/login");
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (data?.role !== "admin") redirect("/");
+  return user;
 }

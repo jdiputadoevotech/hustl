@@ -113,6 +113,15 @@ create table if not exists public.profiles (
   -- Student privacy: when true, non-parties see a placeholder instead of the
   -- student's contract history (enforced in the contracts SELECT policy).
   contracts_hidden   boolean not null default false,
+  -- Admin moderation: archived users are hard-locked out (blocked at login and
+  -- their live sessions killed) by the proxy. Only the service-role admin client
+  -- may flip this (guarded by profiles_guard_admin_fields below).
+  archived           boolean not null default false,
+  -- Verification: 'none' -> 'pending' (user requests) -> 'verified'|'rejected'
+  -- (admin decides). Only service role may set verified/rejected; the owner may
+  -- only request (->pending) or withdraw (->none). Both enforced by the trigger.
+  verification_status text not null default 'none'
+                     check (verification_status in ('none','pending','verified','rejected')),
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
@@ -222,6 +231,38 @@ create policy "Users can update their own profile"
 drop policy if exists "Users can delete their own profile" on public.profiles;
 create policy "Users can delete their own profile"
   on public.profiles for delete using (auth.uid() = id);
+
+-- Column guard: RLS can restrict WHICH rows a user updates but not WHICH columns,
+-- so without this a user could self-set verification_status='verified' or
+-- archived=false via the raw API. This BEFORE UPDATE trigger is NOT security
+-- definer, so current_user reflects the caller: 'service_role' for the admin
+-- client (bypasses RLS), 'authenticated' for a normal signed-in request.
+--   * archived              -> only service_role may change it.
+--   * verification_status   -> owner may only move to 'pending' or 'none';
+--                              'verified'/'rejected' require service_role.
+create or replace function public.profiles_guard_admin_fields()
+returns trigger
+language plpgsql
+as $$
+begin
+  if current_user = 'service_role' then
+    return new;  -- admin client: unrestricted
+  end if;
+  if new.archived is distinct from old.archived then
+    raise exception 'archived can only be changed by an administrator';
+  end if;
+  if new.verification_status is distinct from old.verification_status
+     and new.verification_status not in ('pending','none') then
+    raise exception 'verification_status can only be set to that value by an administrator';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_admin_fields on public.profiles;
+create trigger profiles_guard_admin_fields
+  before update on public.profiles
+  for each row execute function public.profiles_guard_admin_fields();
 
 -- ---------- JOBS ----------
 drop policy if exists "Jobs are viewable by everyone" on public.jobs;
@@ -394,12 +435,13 @@ select
   j.*,
   p.full_name as employer_name,
   p.establishment_name as employer_establishment_name,
+  p.verification_status as employer_verification_status,
   coalesce(round(avg(r.rating), 1), 0)::numeric(2, 1) as employer_rating_avg,
   count(r.id) as employer_rating_count
 from public.jobs j
 left join public.profiles p on p.id = j.employer_id
 left join public.reviews  r on r.employer_id = j.employer_id
-group by j.id, p.full_name, p.establishment_name;
+group by j.id, p.full_name, p.establishment_name, p.verification_status;
 ```
 
 That's the whole schema — there is no separate Storage step (jobs have no images).
@@ -533,6 +575,63 @@ create policy "Contracts visible to the parties"
       where p.id = contracts.student_id and p.contracts_hidden = false
     )
   );
+```
+
+### Already ran the Fresh Migration? Add admin moderation + verification
+
+Adds `profiles.archived` (hard lockout) and `profiles.verification_status`, the
+column-guard trigger that stops users self-elevating those fields, and refreshes
+the view to expose `employer_verification_status` for the job-card badge.
+Idempotent.
+
+```sql
+alter table public.profiles
+  add column if not exists archived boolean not null default false,
+  add column if not exists verification_status text not null default 'none'
+    check (verification_status in ('none','pending','verified','rejected'));
+
+-- Column guard: only the service-role admin client may set archived, or set
+-- verification_status to verified/rejected. Owners may only request (->pending)
+-- or withdraw (->none). Not security-definer, so current_user is the caller.
+create or replace function public.profiles_guard_admin_fields()
+returns trigger
+language plpgsql
+as $$
+begin
+  if current_user = 'service_role' then
+    return new;
+  end if;
+  if new.archived is distinct from old.archived then
+    raise exception 'archived can only be changed by an administrator';
+  end if;
+  if new.verification_status is distinct from old.verification_status
+     and new.verification_status not in ('pending','none') then
+    raise exception 'verification_status can only be set to that value by an administrator';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_admin_fields on public.profiles;
+create trigger profiles_guard_admin_fields
+  before update on public.profiles
+  for each row execute function public.profiles_guard_admin_fields();
+
+-- Recreate the view to add employer_verification_status (drop first: `j.*`
+-- positions shift and create-or-replace can't reorder columns).
+drop view if exists public.jobs_with_employer;
+create view public.jobs_with_employer as
+select
+  j.*,
+  p.full_name as employer_name,
+  p.establishment_name as employer_establishment_name,
+  p.verification_status as employer_verification_status,
+  coalesce(round(avg(r.rating), 1), 0)::numeric(2, 1) as employer_rating_avg,
+  count(r.id) as employer_rating_count
+from public.jobs j
+left join public.profiles p on p.id = j.employer_id
+left join public.reviews  r on r.employer_id = j.employer_id
+group by j.id, p.full_name, p.establishment_name, p.verification_status;
 ```
 
 ### Already ran the Fresh Migration? Add the `saved_jobs` bookmarks table

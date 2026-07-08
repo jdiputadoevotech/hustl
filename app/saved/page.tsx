@@ -51,7 +51,7 @@ export default async function SavedJobsPage({
   let query = supabase
     .from("jobs_with_employer")
     .select(
-      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_rating_avg, employer_rating_count",
+      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_verification_status, employer_rating_avg, employer_rating_count",
     )
     .in("id", ids)
     .eq("is_disabled", false); // hide jobs the owner has since hidden/drafted
@@ -134,6 +134,7 @@ export default async function SavedJobsPage({
                 created_at: j.created_at,
                 employer_name: j.employer_name,
                 employer_establishment_name: j.employer_establishment_name,
+                employer_verification_status: j.employer_verification_status,
                 employer_rating_avg: j.employer_rating_avg,
                 employer_rating_count: j.employer_rating_count,
               }}

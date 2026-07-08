@@ -20,6 +20,13 @@ export type WorkMode = "on-site" | "remote" | "hybrid";
 /** Account role. A label for now — RLS still lets anyone post or be hired. */
 export type Role = "student" | "employer" | "admin";
 
+/**
+ * Account verification state. Users request ('none'/'rejected' -> 'pending');
+ * an admin decides ('pending' -> 'verified'|'rejected'). A DB trigger stops
+ * users self-setting 'verified'/'rejected'. 'verified' shows a public badge.
+ */
+export type VerificationStatus = "none" | "pending" | "verified" | "rejected";
+
 /** A single question/answer pair shown in a job's FAQ accordion. */
 export interface Faq {
   question: string;
@@ -59,6 +66,8 @@ export interface Profile {
   website_url: string | null;
   socials: Socials; // jsonb, defaults to {}
   contracts_hidden: boolean; // student hides their contracts from public profile
+  archived: boolean; // admin-only; archived users are locked out (proxy-enforced)
+  verification_status: VerificationStatus;
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }
@@ -92,6 +101,7 @@ export interface Job {
 export interface JobWithEmployer extends Job {
   employer_name: string | null;
   employer_establishment_name: string | null; // employer's establishment_name (company)
+  employer_verification_status: VerificationStatus; // drives the verified badge on job cards
   employer_rating_avg: number; // 0 when no reviews
   employer_rating_count: number;
 }

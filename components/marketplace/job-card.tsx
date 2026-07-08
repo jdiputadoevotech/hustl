@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Flame, MapPin, Clock } from "lucide-react";
+import { Flame, MapPin, Clock, BadgeCheck } from "lucide-react";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { StarRating } from "@/components/marketplace/star-rating";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ type JobCardData = Pick<
 > & {
   employer_name?: string | null;
   employer_establishment_name?: string | null;
+  employer_verification_status?: string | null;
   employer_rating_avg?: number | null;
   employer_rating_count?: number | null;
 };
@@ -125,7 +126,15 @@ export function JobCard({
             <div className="flex items-center gap-2 min-w-0">
               <AvatarInitials name={poster} className="h-6 w-6 text-[10px]" />
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{poster}</p>
+                <p className="flex items-center gap-1 text-sm font-medium truncate">
+                  <span className="truncate">{poster}</span>
+                  {job.employer_verification_status === "verified" && (
+                    <BadgeCheck
+                      className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+                      aria-label="Verified employer"
+                    />
+                  )}
+                </p>
                 <p className="text-[11px] text-muted-foreground">
                   {timeAgo(job.created_at)}
                 </p>
