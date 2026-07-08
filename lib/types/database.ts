@@ -26,6 +26,13 @@ export interface Faq {
   answer: string;
 }
 
+/** Establishment social links. Stored as jsonb; all keys optional. */
+export interface Socials {
+  facebook?: string;
+  instagram?: string;
+  linkedin?: string;
+}
+
 /** Lifecycle of a hiring contract. Matches the CHECK on contracts.status. */
 export type ContractStatus =
   | "Offered"
@@ -36,7 +43,9 @@ export type ContractStatus =
 
 /**
  * A user profile. Row id matches auth.users.id (1:1 with Supabase Auth).
- * `role` is a label only — anyone can still act as an employer or a student.
+ * Everyone starts a 'student'; the become-employer flow flips role to
+ * 'employer' (blocked for .edu emails). The establishment fields are the
+ * poster's company (employer) or school (student).
  */
 export interface Profile {
   id: string; // uuid, FK -> auth.users.id
@@ -45,6 +54,11 @@ export interface Profile {
   messenger_username: string | null; // used for m.me/<username> handoff
   bio: string | null;
   skills: string[] | null;
+  establishment_name: string | null; // company (employer) / school (student); blank employer => independent
+  establishment_description: string | null;
+  website_url: string | null;
+  socials: Socials; // jsonb, defaults to {}
+  contracts_hidden: boolean; // student hides their contracts from public profile
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }
@@ -64,7 +78,6 @@ export interface Job {
   location: string | null;
   work_mode: WorkMode | null;
   term: string | null; // free-text duration, e.g. "3-4 days"
-  company: string | null; // blank => individual posting
   is_urgent: boolean;
   faqs: Faq[]; // employer Q&A, 2–10 to be publicly listed
   is_disabled: boolean; // hidden from public listings (manual draft or <2 FAQs)
@@ -78,6 +91,7 @@ export interface Job {
  */
 export interface JobWithEmployer extends Job {
   employer_name: string | null;
+  employer_establishment_name: string | null; // employer's establishment_name (company)
   employer_rating_avg: number; // 0 when no reviews
   employer_rating_count: number;
 }

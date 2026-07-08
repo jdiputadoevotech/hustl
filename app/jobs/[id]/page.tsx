@@ -28,7 +28,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const { data: job, error: jobError } = await supabase
     .from("jobs")
     .select(
-      "id, title, description, job_type, category, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, faqs, is_disabled, created_at, employer_id, profiles ( id, full_name, messenger_username )",
+      "id, title, description, job_type, category, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, faqs, is_disabled, created_at, employer_id, profiles ( id, full_name, establishment_name, messenger_username )",
     )
     .eq("id", id)
     .maybeSingle();
@@ -39,6 +39,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const employer = job.profiles as unknown as {
     id: string;
     full_name: string | null;
+    establishment_name: string | null;
     messenger_username: string | null;
   } | null;
 
@@ -74,9 +75,9 @@ export default async function JobDetailPage({ params }: { params: Params }) {
   const faqs = (job.faqs as Faq[] | null) ?? [];
 
   const employerName = employer
-    ? job.company && employer.full_name
-      ? `${job.company} (${employer.full_name})`
-      : job.company || employer.full_name || "an employer"
+    ? employer.establishment_name && employer.full_name
+      ? `${employer.establishment_name} (${employer.full_name})`
+      : employer.establishment_name || employer.full_name || "an employer"
     : null;
 
   // Meta groups for the single divider-separated facts row. Only present groups
@@ -138,7 +139,7 @@ export default async function JobDetailPage({ params }: { params: Params }) {
           {employer && (
             <div className="flex items-center gap-3">
               <AvatarInitials
-                name={job.company || employer.full_name}
+                name={employer.establishment_name || employer.full_name}
                 className="h-11 w-11 text-sm"
               />
               <div className="min-w-0">

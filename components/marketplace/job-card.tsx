@@ -25,19 +25,19 @@ type JobCardData = Pick<
   | "location"
   | "work_mode"
   | "term"
-  | "company"
   | "is_urgent"
   | "created_at"
 > & {
   employer_name?: string | null;
+  employer_establishment_name?: string | null;
   employer_rating_avg?: number | null;
   employer_rating_count?: number | null;
 };
 
 /** Job board card: colored type banner, employer row, title, rating, pay. */
 export function JobCard({ job }: { job: JobCardData }) {
-  const employer = job.employer_name ?? "An employer";
-  const poster = job.company || employer;
+  const poster =
+    job.employer_establishment_name || job.employer_name || "An employer";
   const skills = job.skills ?? [];
   const place = job.work_mode || job.location;
   return (

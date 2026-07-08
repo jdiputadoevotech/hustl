@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { JobForm } from "@/components/marketplace/job-form";
 import { createJob } from "../actions";
 
@@ -15,6 +16,19 @@ export default async function NewJobPage({
   const { error } = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/auth/login");
+
+  // Only employers can post — students never see the form.
+  const supabase = await createClient();
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (me?.role !== "employer") {
+    redirect(
+      `/profile/${user.id}?error=${encodeURIComponent("Become an employer to post a job.")}`,
+    );
+  }
 
   return (
     <div className="space-y-6 py-10">

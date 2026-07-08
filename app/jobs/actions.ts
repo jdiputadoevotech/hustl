@@ -21,7 +21,6 @@ type JobFields = {
   location: string | null;
   work_mode: string | null;
   term: string | null;
-  company: string | null;
   is_urgent: boolean;
   faqs: Faq[];
 };
@@ -65,7 +64,6 @@ function readJob(formData: FormData): JobFields {
     location: String(formData.get("location") ?? "").trim() || null,
     work_mode: String(formData.get("work_mode") ?? "").trim() || null,
     term: String(formData.get("term") ?? "").trim() || null,
-    company: String(formData.get("company") ?? "").trim() || null,
     is_urgent: formData.get("is_urgent") === "on",
     faqs,
   };
@@ -78,6 +76,20 @@ export async function createJob(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) redirect("/auth/login");
 
+  const supabase = await createClient();
+
+  // Only employers may post. RLS enforces this too; this gives a clear message.
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (me?.role !== "employer") {
+    redirect(
+      `/profile/${user.id}?error=${encodeURIComponent("Become an employer to post a job.")}`,
+    );
+  }
+
   const fields = readJob(formData);
   if (fields.faqs.length > MAX_FAQS) {
     redirect(`/jobs/new?error=${encodeURIComponent("You can add at most 10 FAQs.")}`);
@@ -87,7 +99,6 @@ export async function createJob(formData: FormData) {
   const canList = fields.faqs.length >= MIN_LISTED_FAQS;
   const is_disabled = !(wantsPost(formData) && canList);
 
-  const supabase = await createClient();
   const { data, error } = await supabase
     .from("jobs")
     .insert({ employer_id: user.id, ...fields, is_disabled })

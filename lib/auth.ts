@@ -18,3 +18,11 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   if (error || !claims?.sub) return null;
   return { id: claims.sub as string, email: (claims.email as string) ?? "" };
 }
+
+/**
+ * Students use .edu emails and can't become employers. Matches ".edu" as a
+ * domain segment so "x.education.com" doesn't false-positive.
+ */
+export function canBecomeEmployer(email: string): boolean {
+  return !/\.edu(\.|$)/i.test(email);
+}

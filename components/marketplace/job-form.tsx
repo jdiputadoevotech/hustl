@@ -43,7 +43,6 @@ interface JobFormProps {
     | "location"
     | "work_mode"
     | "term"
-    | "company"
     | "is_urgent"
     | "faqs"
     | "is_disabled"
@@ -116,7 +115,7 @@ export function JobForm({
         <CardContent className="space-y-6 pt-6">
           <FormSection
             title="The basics"
-            description="What the job is and who's hiring."
+            description="What the job is."
           >
             <div className="space-y-2">
               <Label htmlFor="title">Title</Label>
@@ -128,20 +127,6 @@ export function JobForm({
                 defaultValue={job?.title}
                 placeholder="Need a tutor for Calculus 2"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="company">Company</Label>
-              <Input
-                id="company"
-                name="company"
-                maxLength={120}
-                defaultValue={job?.company ?? ""}
-                placeholder="BrightLeaf Studio"
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave blank to post as an individual.
-              </p>
             </div>
           </FormSection>
 

@@ -37,7 +37,7 @@ export default async function JobsPage({
   let query = supabase
     .from("jobs_with_employer")
     .select(
-      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, company, is_urgent, created_at, employer_name, employer_rating_avg, employer_rating_count",
+      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_rating_avg, employer_rating_count",
     );
 
   query = query.eq("is_disabled", false); // hide drafts / incomplete jobs
@@ -55,6 +55,15 @@ export default async function JobsPage({
 
   const { data: jobs } = await query;
   const user = await getCurrentUser();
+  let isEmployer = false;
+  if (user) {
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    isEmployer = me?.role === "employer";
+  }
   const count = jobs?.length ?? 0;
 
   return (
@@ -78,7 +87,7 @@ export default async function JobsPage({
           <JobTypeFilter selected={type} />
           <BudgetFilter max={max} />
         </div>
-        {user && (
+        {isEmployer && (
           <Button asChild size="sm">
             <Link href="/jobs/new">Post a job</Link>
           </Button>
@@ -105,7 +114,7 @@ export default async function JobsPage({
 
       {count === 0 ? (
         <p className="text-muted-foreground py-10 text-center">
-          No jobs found. {user && "Be the first to post one!"}
+          No jobs found. {isEmployer && "Be the first to post one!"}
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -124,10 +133,10 @@ export default async function JobsPage({
                 location: j.location,
                 work_mode: j.work_mode,
                 term: j.term,
-                company: j.company,
                 is_urgent: j.is_urgent,
                 created_at: j.created_at,
                 employer_name: j.employer_name,
+                employer_establishment_name: j.employer_establishment_name,
                 employer_rating_avg: j.employer_rating_avg,
                 employer_rating_count: j.employer_rating_count,
               }}

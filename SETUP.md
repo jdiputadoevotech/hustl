@@ -95,13 +95,23 @@ drop table if exists public.jobs      cascade;
 create table if not exists public.profiles (
   id                 uuid primary key references auth.users (id) on delete cascade,
   full_name          text,
-  -- Account role. A label only for now (no admin pages yet) — RLS still lets
-  -- any authenticated user post a job or be hired regardless of role.
+  -- Account role. Everyone starts 'student'; the become-employer flow flips it
+  -- to 'employer' (blocked for .edu emails). Only employers may post jobs
+  -- (enforced by the jobs INSERT policy below + the server action).
   role               text not null default 'student'
                      check (role in ('student','employer','admin')),
   messenger_username text,            -- powers m.me/<username> contact handoff
   bio                text,
   skills             text[],
+  -- Establishment: the poster's company (employer) or school (student). An
+  -- employer with a blank establishment_name is an "independent" employer.
+  establishment_name        text,
+  establishment_description text,
+  website_url               text,
+  socials                   jsonb not null default '{}'::jsonb,  -- { facebook, instagram, linkedin }
+  -- Student privacy: when true, non-parties see a placeholder instead of the
+  -- student's contract history (enforced in the contracts SELECT policy).
+  contracts_hidden   boolean not null default false,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
@@ -130,7 +140,6 @@ create table public.jobs (
   location    text,                           -- free text, e.g. 'Manila', 'Campus'
   work_mode   text check (work_mode in ('on-site','remote','hybrid')),
   term        text,                           -- free-text duration, e.g. '3-4 days'
-  company     text,                           -- blank => individual posting
   is_urgent   boolean not null default false,
   faqs        jsonb not null default '[]'::jsonb,  -- [{ "question", "answer" }], max 10
   -- Public-visibility flag, set by the server. A job is listed (false) only when
@@ -201,10 +210,16 @@ drop policy if exists "Jobs are viewable by everyone" on public.jobs;
 create policy "Jobs are viewable by everyone"
   on public.jobs for select using (true);
 
--- Any authenticated user may post a job, as themselves.
+-- Only employers may post a job, as themselves.
 drop policy if exists "Users can post jobs" on public.jobs;
 create policy "Users can post jobs"
-  on public.jobs for insert with check (employer_id = auth.uid());
+  on public.jobs for insert with check (
+    employer_id = auth.uid()
+    and exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.role = 'employer'
+    )
+  );
 
 drop policy if exists "Employers can update their own jobs" on public.jobs;
 create policy "Employers can update their own jobs"
@@ -216,11 +231,19 @@ create policy "Employers can delete their own jobs"
   on public.jobs for delete using (auth.uid() = employer_id);
 
 -- ---------- CONTRACTS ----------
--- Visible to the two parties only.
+-- The two parties always see a contract; everyone else may read a student's
+-- contracts only when the student hasn't hidden them (public profile display).
 drop policy if exists "Contracts visible to the parties" on public.contracts;
 create policy "Contracts visible to the parties"
   on public.contracts for select
-  using (auth.uid() = employer_id or auth.uid() = student_id);
+  using (
+    auth.uid() = employer_id
+    or auth.uid() = student_id
+    or exists (
+      select 1 from public.profiles p
+      where p.id = contracts.student_id and p.contracts_hidden = false
+    )
+  );
 
 -- Only the job's employer creates an offer, as themselves, in 'Offered' state.
 drop policy if exists "Employers can offer contracts" on public.contracts;
@@ -331,12 +354,13 @@ create or replace view public.jobs_with_employer as
 select
   j.*,
   p.full_name as employer_name,
+  p.establishment_name as employer_establishment_name,
   coalesce(round(avg(r.rating), 1), 0)::numeric(2, 1) as employer_rating_avg,
   count(r.id) as employer_rating_count
 from public.jobs j
 left join public.profiles p on p.id = j.employer_id
 left join public.reviews  r on r.employer_id = j.employer_id
-group by j.id, p.full_name;
+group by j.id, p.full_name, p.establishment_name;
 ```
 
 That's the whole schema — there is no separate Storage step (jobs have no images).
@@ -389,6 +413,87 @@ alter table public.profiles
 
 -- Drop the redundant, unread job_id from reviews (contract_id implies it).
 alter table public.reviews drop column if exists job_id;
+```
+
+### Already ran the Fresh Migration? Move `company` onto profiles as an establishment
+
+Moves the per-job `company` to a per-profile **establishment** (name +
+description + website + socials), backfills each employer's most-recent non-blank
+`company`, drops `jobs.company`, adds student contract-privacy, gates job posting
+to employers, and opens contract reads for public student profiles. Idempotent.
+
+```sql
+-- 1. Establishment + privacy columns on profiles.
+alter table public.profiles
+  add column if not exists establishment_name        text,
+  add column if not exists establishment_description text,
+  add column if not exists website_url               text,
+  add column if not exists socials                   jsonb not null default '{}'::jsonb,
+  add column if not exists contracts_hidden          boolean not null default false;
+
+-- 2. Drop the view first — its `j.*` depends on jobs.company, which blocks the
+--    column drop below.
+drop view if exists public.jobs_with_employer;
+
+-- 3. Backfill establishment_name from each employer's latest non-blank company,
+--    then drop jobs.company. Guarded so re-runs are safe once company is gone.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'jobs' and column_name = 'company'
+  ) then
+    update public.profiles p
+    set establishment_name = sub.company
+    from (
+      select distinct on (employer_id) employer_id, company
+      from public.jobs
+      where company is not null and btrim(company) <> ''
+      order by employer_id, created_at desc
+    ) sub
+    where p.id = sub.employer_id
+      and (p.establishment_name is null or btrim(p.establishment_name) = '');
+
+    alter table public.jobs drop column company;
+  end if;
+end $$;
+
+-- 4. Recreate the view exposing employer_establishment_name.
+create view public.jobs_with_employer as
+select
+  j.*,
+  p.full_name as employer_name,
+  p.establishment_name as employer_establishment_name,
+  coalesce(round(avg(r.rating), 1), 0)::numeric(2, 1) as employer_rating_avg,
+  count(r.id) as employer_rating_count
+from public.jobs j
+left join public.profiles p on p.id = j.employer_id
+left join public.reviews  r on r.employer_id = j.employer_id
+group by j.id, p.full_name, p.establishment_name;
+
+-- 5. Only employers may post a job.
+drop policy if exists "Users can post jobs" on public.jobs;
+create policy "Users can post jobs"
+  on public.jobs for insert with check (
+    employer_id = auth.uid()
+    and exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.role = 'employer'
+    )
+  );
+
+-- 6. Contracts: parties always; others only when the student hasn't hidden them.
+drop policy if exists "Contracts visible to the parties" on public.contracts;
+create policy "Contracts visible to the parties"
+  on public.contracts for select
+  using (
+    auth.uid() = employer_id
+    or auth.uid() = student_id
+    or exists (
+      select 1 from public.profiles p
+      where p.id = contracts.student_id and p.contracts_hidden = false
+    )
+  );
 ```
 
 ---

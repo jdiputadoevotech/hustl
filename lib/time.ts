@@ -24,3 +24,11 @@ export function timeAgo(iso: string): string {
   }
   return "just now";
 }
+
+/** Month + year for "Member since" labels, e.g. "Oct 2023". */
+export function monthYear(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+}
