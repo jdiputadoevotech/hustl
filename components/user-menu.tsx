@@ -17,9 +17,11 @@ import {
 export function UserMenu({
   userId,
   name,
+  isAdmin = false,
 }: {
   userId: string;
   name: string;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
 
@@ -45,9 +47,11 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/profile/edit">Edit profile</Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/dashboard">Dashboard</Link>
-        </DropdownMenuItem>
+        {!isAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard">Dashboard</Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={logout}>Log out</DropdownMenuItem>
       </DropdownMenuContent>

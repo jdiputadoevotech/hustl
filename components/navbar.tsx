@@ -16,6 +16,7 @@ export async function Navbar() {
 
   let displayName = "";
   let isStudent = false;
+  let isAdmin = false;
   if (user) {
     const supabase = await createClient();
     const { data: profile } = await supabase
@@ -25,6 +26,7 @@ export async function Navbar() {
       .single();
     displayName = profile?.full_name || user.email.split("@")[0];
     isStudent = profile?.role === "student";
+    isAdmin = profile?.role === "admin";
   }
 
   return (
@@ -70,12 +72,14 @@ export async function Navbar() {
             <EnvVarWarning />
           ) : user ? (
             <>
-              <Link
-                href="/dashboard"
-                className="hidden sm:inline text-base font-medium text-foreground/80 hover:text-foreground"
-              >
-                Dashboard
-              </Link>
+              {!isAdmin && (
+                <Link
+                  href="/dashboard"
+                  className="hidden sm:inline text-base font-medium text-foreground/80 hover:text-foreground"
+                >
+                  Dashboard
+                </Link>
+              )}
               {isStudent && (
                 <Link
                   href="/saved"
@@ -86,7 +90,7 @@ export async function Navbar() {
                   <Bookmark className="h-5 w-5" />
                 </Link>
               )}
-              <UserMenu userId={user.id} name={displayName} />
+              <UserMenu userId={user.id} name={displayName} isAdmin={isAdmin} />
             </>
           ) : (
             <>

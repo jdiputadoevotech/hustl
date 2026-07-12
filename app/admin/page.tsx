@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// No standalone overview yet — Users is the default admin landing.
+// Overview is the admin landing.
 export default function AdminIndex() {
-  redirect("/admin/users");
+  redirect("/admin/overview");
 }

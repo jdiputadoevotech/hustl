@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, Briefcase, BadgeCheck } from "lucide-react";
+import { LayoutDashboard, Users, Briefcase, BadgeCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { hasEnvVars } from "@/lib/utils";
@@ -10,6 +10,7 @@ import { hasEnvVars } from "@/lib/utils";
  * can be dropped into the layout unconditionally.
  */
 const LINKS = [
+  { href: "/admin/overview", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/jobs", label: "Jobs", icon: Briefcase },
   { href: "/admin/verification", label: "Verification", icon: BadgeCheck },
