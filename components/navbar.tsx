@@ -4,8 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { hasEnvVars } from "@/lib/utils";
 import { EnvVarWarning } from "@/components/env-var-warning";
-import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/user-menu";
+import { AuthTriggerButtons } from "@/components/auth/auth-trigger-buttons";
 
 /**
  * Fiverr-style top nav: logo, centered marketplace search, and either the
@@ -93,17 +93,7 @@ export async function Navbar() {
               <UserMenu userId={user.id} name={displayName} isAdmin={isAdmin} />
             </>
           ) : (
-            <>
-              <Link
-                href="/auth/login"
-                className="text-base font-medium text-foreground/80 hover:text-foreground"
-              >
-                Sign in
-              </Link>
-              <Button asChild size="lg">
-                <Link href="/auth/sign-up">Join</Link>
-              </Button>
-            </>
+            <AuthTriggerButtons />
           )}
         </div>
       </div>

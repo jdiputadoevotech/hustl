@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { AuthModalProvider } from "@/components/auth/auth-modal";
 
 /**
  * Wraps page content in the standard navbar + footer + centered container.
@@ -24,11 +25,15 @@ export function SiteShell({
   const bare = usePathname()?.startsWith("/onboarding");
 
   if (bare) {
-    return <main className="min-h-screen w-full">{children}</main>;
+    return (
+      <AuthModalProvider>
+        <main className="min-h-screen w-full">{children}</main>
+      </AuthModalProvider>
+    );
   }
 
   return (
-    <>
+    <AuthModalProvider>
       {navbar}
       {adminNav}
       <main className="min-h-screen w-full">
@@ -37,6 +42,6 @@ export function SiteShell({
         </div>
       </main>
       {footer}
-    </>
+    </AuthModalProvider>
   );
 }

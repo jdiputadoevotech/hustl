@@ -1,28 +1,73 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser, canBecomeEmployer } from "@/lib/auth";
+import { HomeHero } from "@/components/home/home-hero";
+import { LatestGigs } from "@/components/home/latest-gigs";
+import { HowItWorks } from "@/components/home/how-it-works";
+import type { JobWithEmployer } from "@/lib/types/database";
 
-export default function Home() {
+type Variant = "guest" | "student" | "employer" | "admin";
+
+export default async function Home() {
+  const user = await getCurrentUser();
+  const supabase = await createClient();
+
+  let variant: Variant = "guest";
+  let name = "";
+  let employerEligible = false;
+  let verificationStatus: string | null = null;
+  const profileHref = user ? `/profile/${user.id}` : undefined;
+
+  if (user) {
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("full_name, role, verification_status")
+      .eq("id", user.id)
+      .single();
+    const role = me?.role ?? "student";
+    variant = role === "admin" ? "admin" : role === "employer" ? "employer" : "student";
+    name = me?.full_name || user.email.split("@")[0] || "";
+    employerEligible = canBecomeEmployer(user.email);
+    verificationStatus = me?.verification_status ?? null;
+  }
+
+  // Admins land on their own console — skip the student-facing feed for them.
+  const showFeed = variant !== "admin";
+  const isStudent = variant === "student";
+
+  let jobs: JobWithEmployer[] = [];
+  const savedIds = new Set<string>();
+  if (showFeed) {
+    const { data } = await supabase
+      .from("jobs_with_employer")
+      .select(
+        "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_verification_status, employer_rating_avg, employer_rating_count",
+      )
+      .eq("is_disabled", false)
+      .order("created_at", { ascending: false })
+      .limit(6);
+    jobs = (data as JobWithEmployer[] | null) ?? [];
+    if (isStudent && user) {
+      const { data: saved } = await supabase
+        .from("saved_jobs")
+        .select("job_id")
+        .eq("student_id", user.id);
+      saved?.forEach((s) => savedIds.add(s.job_id));
+    }
+  }
+
   return (
-    <div className="flex flex-col items-center text-center gap-8 py-20">
-      <span className="text-xs font-medium px-3 py-1 rounded-full border text-muted-foreground">
-        For University of San Carlos students
-      </span>
-      <h1 className="text-4xl sm:text-5xl font-bold tracking-tight max-w-2xl">
-        The campus job board for Carolinians.
-      </h1>
-      <p className="text-muted-foreground max-w-xl text-lg">
-        Hustl connects USC students with gigs and part- or full-time work. Browse
-        openings, message employers, and get hired — chatting happens on
-        Messenger, hiring is tracked here.
-      </p>
-      <div className="flex gap-3">
-        <Button asChild size="lg">
-          <Link href="/jobs">Browse jobs</Link>
-        </Button>
-        <Button asChild size="lg" variant="outline">
-          <Link href="/jobs/new">Post a job</Link>
-        </Button>
-      </div>
+    <div className="flex min-h-screen flex-col gap-16">
+      <HomeHero
+        variant={variant}
+        name={name}
+        employerEligible={employerEligible}
+        verificationStatus={verificationStatus}
+        profileHref={profileHref}
+      />
+      {showFeed && jobs.length > 0 && (
+        <LatestGigs jobs={jobs} canSave={isStudent} savedIds={savedIds} />
+      )}
+      {variant !== "admin" && <HowItWorks />}
     </div>
   );
 }

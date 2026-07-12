@@ -42,6 +42,7 @@ export default async function DashboardPage({
     .select("role")
     .eq("id", user.id)
     .single();
+  if (me?.role === "admin") redirect("/admin/overview");
   const isEmployer = me?.role === "employer";
 
   // Employers hire; students get hired. Fetch only what this role's view uses.

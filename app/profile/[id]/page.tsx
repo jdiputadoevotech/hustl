@@ -9,6 +9,9 @@ import {
   Instagram,
   Linkedin,
   BadgeCheck,
+  ShieldCheck,
+  Users,
+  Briefcase,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, canBecomeEmployer } from "@/lib/auth";
@@ -79,6 +82,7 @@ export default async function ProfilePage({
   const isOwner = user?.id === profile.id;
   const role = (profile.role ?? "student") as Role;
   const isEmployer = role === "employer";
+  const isAdmin = role === "admin";
   const socials = (profile.socials ?? {}) as Socials;
   const vStatus = (profile.verification_status ?? "none") as VerificationStatus;
   const isVerified = vStatus === "verified";
@@ -119,7 +123,7 @@ export default async function ProfilePage({
             ?.full_name ?? null)
         : "Deleted user",
     }));
-  } else {
+  } else if (!isAdmin) {
     // Contracts are RLS-gated: parties always see them; others only when the
     // student hasn't hidden them. When hidden, show a placeholder to visitors.
     if (isOwner || !profile.contracts_hidden) {
@@ -199,6 +203,12 @@ export default async function ProfilePage({
                   />
                 )}
               </h1>
+              {isAdmin && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-600/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:bg-indigo-400/10 dark:text-indigo-300">
+                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+                  Admin account
+                </span>
+              )}
               {isEmployer && <StarRating average={rAvg} count={rCount} />}
             </div>
             {profile.bio && (
@@ -278,6 +288,51 @@ export default async function ProfilePage({
                 />
               </div>
             </>
+          ) : isAdmin ? (
+            <section className="max-w-3xl">
+              <div className="rounded-xl border bg-gradient-to-br from-indigo-50 to-background p-8 dark:from-indigo-950/30">
+                <div className="flex items-start gap-4">
+                  <div className="rounded-xl bg-indigo-600/10 p-3 dark:bg-indigo-400/10">
+                    <ShieldCheck
+                      className="h-7 w-7 text-indigo-600 dark:text-indigo-400"
+                      aria-hidden
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-bold">Administrator</h2>
+                    <p className="text-muted-foreground">
+                      This is a Hustl platform administrator account. Admins
+                      manage users, moderate job postings, and review
+                      verification requests. They don&apos;t post jobs, take
+                      contracts, or leave reviews.
+                    </p>
+                  </div>
+                </div>
+
+                {isOwner && (
+                  <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                    <Button asChild variant="outline" className="h-auto justify-start gap-3 p-4">
+                      <Link href="/admin/overview">
+                        <LayoutDashboard className="h-5 w-5 shrink-0" aria-hidden />
+                        <span className="text-sm font-medium">Overview</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-auto justify-start gap-3 p-4">
+                      <Link href="/admin/users">
+                        <Users className="h-5 w-5 shrink-0" aria-hidden />
+                        <span className="text-sm font-medium">Users</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-auto justify-start gap-3 p-4">
+                      <Link href="/admin/jobs">
+                        <Briefcase className="h-5 w-5 shrink-0" aria-hidden />
+                        <span className="text-sm font-medium">Jobs</span>
+                      </Link>
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </section>
           ) : (
             <>
               <section className="space-y-4">
@@ -410,7 +465,7 @@ export default async function ProfilePage({
               </div>
             </div>
 
-            {isOwner && (
+            {isOwner && !isAdmin && (
               <>
                 {vStatus !== "verified" && (
                   <div className="rounded-xl border bg-emerald-50/50 p-6 space-y-3 dark:bg-emerald-950/20">

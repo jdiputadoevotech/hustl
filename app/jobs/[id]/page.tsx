@@ -10,6 +10,7 @@ import { StarRating } from "@/components/marketplace/star-rating";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { JobTypeBadge } from "@/components/marketplace/job-type-badge";
 import { ContactEmployerButton } from "@/components/marketplace/contact-employer-button";
+import { AuthModalButton } from "@/components/auth/auth-modal-button";
 import { SaveJobButton } from "@/components/marketplace/save-job-button";
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
 import { FaqAccordion } from "@/components/marketplace/faq-accordion";
@@ -286,9 +287,9 @@ export default async function JobDetailPage({ params }: { params: Params }) {
               </div>
             ) : (
               <div className="space-y-2">
-                <Button asChild className="w-full">
-                  <Link href="/auth/login">Sign in to contact</Link>
-                </Button>
+                <AuthModalButton className="w-full">
+                  Sign in to contact
+                </AuthModalButton>
                 <p className="text-xs text-muted-foreground">
                   Sign in so the employer gets your email to send an offer.
                 </p>
