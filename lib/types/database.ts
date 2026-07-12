@@ -139,3 +139,26 @@ export interface Review {
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }
+
+/** Kind of event a notification represents. Written by DB triggers (SETUP.md). */
+export type NotificationType =
+  | "review_received"
+  | "offer_received"
+  | "offer_status"
+  | "verification_requested"
+  | "verification_decided";
+
+/**
+ * An event shown in the navbar bell dropdown. Created only by SECURITY DEFINER
+ * triggers; the recipient reads/marks-read/deletes their own rows. See SETUP.md.
+ */
+export interface Notification {
+  id: string; // uuid
+  user_id: string; // uuid, FK -> profiles.id (recipient)
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  link: string | null; // deep-link target, e.g. /contracts, /profile/{id}
+  read: boolean;
+  created_at: string; // timestamptz
+}

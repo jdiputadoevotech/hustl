@@ -210,13 +210,34 @@ create table public.saved_jobs (
 );
 
 -- ============================================================
+-- NOTIFICATIONS — event feed shown in the navbar bell dropdown.
+-- Rows are written ONLY by the SECURITY DEFINER triggers below (reviews,
+-- contracts, profiles verification) — there is no INSERT policy, so no client
+-- can forge a notification. Users read/mark-read/delete only their own rows.
+-- ============================================================
+create table public.notifications (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references public.profiles (id) on delete cascade,
+  type       text not null,  -- review_received | offer_received | offer_status
+                             -- | verification_requested | verification_decided
+  title      text not null,
+  body       text,
+  link       text,           -- deep-link target, e.g. /contracts, /profile/{id}
+  read       boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index notifications_user_unread_idx
+  on public.notifications (user_id, read, created_at desc);
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
-alter table public.profiles   enable row level security;
-alter table public.jobs       enable row level security;
-alter table public.contracts  enable row level security;
-alter table public.reviews    enable row level security;
-alter table public.saved_jobs enable row level security;
+alter table public.profiles      enable row level security;
+alter table public.jobs          enable row level security;
+alter table public.contracts     enable row level security;
+alter table public.reviews       enable row level security;
+alter table public.saved_jobs    enable row level security;
+alter table public.notifications enable row level security;
 
 -- ---------- PROFILES ----------
 drop policy if exists "Profiles are viewable by everyone" on public.profiles;
@@ -370,6 +391,160 @@ create policy "Students can save jobs"
 drop policy if exists "Students can unsave their jobs" on public.saved_jobs;
 create policy "Students can unsave their jobs"
   on public.saved_jobs for delete using (auth.uid() = student_id);
+
+-- ---------- NOTIFICATIONS ----------
+-- Private to the owner. No INSERT policy on purpose: only the SECURITY DEFINER
+-- triggers (which run as the table owner and bypass RLS) may create rows.
+drop policy if exists "Users can view their notifications" on public.notifications;
+create policy "Users can view their notifications"
+  on public.notifications for select using (auth.uid() = user_id);
+
+drop policy if exists "Users can mark their notifications read" on public.notifications;
+create policy "Users can mark their notifications read"
+  on public.notifications for update
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "Users can delete their notifications" on public.notifications;
+create policy "Users can delete their notifications"
+  on public.notifications for delete using (auth.uid() = user_id);
+
+-- ============================================================
+-- NOTIFICATION TRIGGERS
+-- All SECURITY DEFINER so the insert happens whatever the acting role
+-- (authenticated student/employer, or the service_role admin client) and
+-- bypasses the notifications INSERT RLS. A recipient never gets notified about
+-- their own action (the guards below skip self-notifications).
+-- ============================================================
+
+-- Employer gets a notification when a student reviews them.
+create or replace function public.notify_on_review()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.notifications (user_id, type, title, body, link)
+  values (
+    new.employer_id,
+    'review_received',
+    'New review',
+    'You received a ' || new.rating || '-star review.',
+    '/profile/' || new.employer_id
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_on_review on public.reviews;
+create trigger notify_on_review
+  after insert on public.reviews
+  for each row execute function public.notify_on_review();
+
+-- Student gets a notification when an employer sends them an offer.
+create or replace function public.notify_on_contract_insert()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.notifications (user_id, type, title, body, link)
+  values (
+    new.student_id,
+    'offer_received',
+    'New job offer',
+    'You have received a new job offer.',
+    '/contracts'
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_on_contract_insert on public.contracts;
+create trigger notify_on_contract_insert
+  after insert on public.contracts
+  for each row execute function public.notify_on_contract_insert();
+
+-- Contract status change notifies the OTHER party (Resigned notifies both).
+--   Accepted / Declined -> employer (the student acted)
+--   Completed           -> student  (the employer completed)
+--   Resigned            -> both parties
+create or replace function public.notify_on_contract_status()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if new.status is not distinct from old.status then
+    return new;
+  end if;
+
+  if new.status in ('Accepted', 'Declined') then
+    insert into public.notifications (user_id, type, title, body, link)
+    values (new.employer_id, 'offer_status',
+            'Offer ' || lower(new.status),
+            'A student has ' || lower(new.status) || ' your offer.',
+            '/contracts');
+  elsif new.status = 'Completed' then
+    insert into public.notifications (user_id, type, title, body, link)
+    values (new.student_id, 'offer_status',
+            'Contract completed',
+            'A contract has been marked completed.',
+            '/contracts');
+  elsif new.status = 'Resigned' then
+    insert into public.notifications (user_id, type, title, body, link)
+    values
+      (new.employer_id, 'offer_status', 'Contract resigned',
+       'A contract has been resigned.', '/contracts'),
+      (new.student_id,  'offer_status', 'Contract resigned',
+       'A contract has been resigned.', '/contracts');
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_on_contract_status on public.contracts;
+create trigger notify_on_contract_status
+  after update of status on public.contracts
+  for each row execute function public.notify_on_contract_status();
+
+-- Verification status change. Separate from profiles_guard_admin_fields (which
+-- is a BEFORE UPDATE guard) so it never interferes with that guard's
+-- current_user check.
+--   -> pending             : notify every admin (a request to review)
+--   pending -> verified/rejected : notify the requesting user (the decision)
+create or replace function public.notify_on_verification()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if new.verification_status is not distinct from old.verification_status then
+    return new;
+  end if;
+
+  if new.verification_status = 'pending' then
+    insert into public.notifications (user_id, type, title, body, link)
+    select p.id, 'verification_requested', 'Verification request',
+           coalesce(new.full_name, 'A user') || ' requested verification.',
+           '/admin/verification'
+    from public.profiles p
+    where p.role = 'admin';
+  elsif old.verification_status = 'pending'
+        and new.verification_status in ('verified', 'rejected') then
+    insert into public.notifications (user_id, type, title, body, link)
+    values (new.id, 'verification_decided',
+            'Verification ' || new.verification_status,
+            'Your verification request was ' || new.verification_status || '.',
+            '/profile/' || new.id);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_on_verification on public.profiles;
+create trigger notify_on_verification
+  after update of verification_status on public.profiles
+  for each row execute function public.notify_on_verification();
 
 -- ============================================================
 -- AUTO-CREATE PROFILE ON SIGNUP

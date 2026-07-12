@@ -5,6 +5,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { hasEnvVars } from "@/lib/utils";
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { UserMenu } from "@/components/user-menu";
+import { NotificationBell } from "@/components/notification-bell";
+import { getNotifications } from "@/lib/notifications";
 import { AuthTriggerButtons } from "@/components/auth/auth-trigger-buttons";
 
 /**
@@ -17,6 +19,7 @@ export async function Navbar() {
   let displayName = "";
   let isStudent = false;
   let isAdmin = false;
+  let notifications = { items: [] as Awaited<ReturnType<typeof getNotifications>>["items"], unreadCount: 0 };
   if (user) {
     const supabase = await createClient();
     const { data: profile } = await supabase
@@ -27,6 +30,7 @@ export async function Navbar() {
     displayName = profile?.full_name || user.email.split("@")[0];
     isStudent = profile?.role === "student";
     isAdmin = profile?.role === "admin";
+    notifications = await getNotifications();
   }
 
   return (
@@ -90,6 +94,10 @@ export async function Navbar() {
                   <Bookmark className="h-5 w-5" />
                 </Link>
               )}
+              <NotificationBell
+                items={notifications.items}
+                unreadCount={notifications.unreadCount}
+              />
               <UserMenu userId={user.id} name={displayName} isAdmin={isAdmin} />
             </>
           ) : (
