@@ -200,7 +200,7 @@ export default async function ProfilePage({
       <header className="flex flex-col gap-6 border-b pb-8 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex gap-4 sm:gap-5 min-w-0">
           <AvatarInitials
-            name={estName || profile.full_name}
+            name={role === "student" ? profile.full_name : estName || profile.full_name}
             className="h-16 w-16 sm:h-20 sm:w-20 text-xl sm:text-2xl"
           />
           <div className="space-y-3 min-w-0">
