@@ -15,6 +15,7 @@ import { SaveJobButton } from "@/components/marketplace/save-job-button";
 import { ReportDialog } from "@/components/marketplace/report-dialog";
 import { FormError } from "@/components/marketplace/form-error";
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
+import { ReviewForm } from "@/components/marketplace/review-form";
 import { FaqAccordion } from "@/components/marketplace/faq-accordion";
 import { QuickFaq } from "@/components/marketplace/quick-faq";
 import type { ReviewItem } from "@/components/marketplace/review-list";
@@ -24,7 +25,12 @@ import { deleteJob, toggleJobVisibility } from "../actions";
 import type { Faq, JobType, PayPeriod } from "@/lib/types/database";
 
 type Params = Promise<{ id: string }>;
-type SearchParams = Promise<{ reportOk?: string; reportError?: string }>;
+type SearchParams = Promise<{
+  reportOk?: string;
+  reportError?: string;
+  contractOk?: string;
+  contractError?: string;
+}>;
 
 export default async function JobDetailPage({
   params,
@@ -34,7 +40,8 @@ export default async function JobDetailPage({
   searchParams: SearchParams;
 }) {
   const { id } = await params;
-  const { reportOk, reportError } = await searchParams;
+  const { reportOk, reportError, contractOk, contractError } =
+    await searchParams;
   const supabase = await createClient();
 
   const { data: job, error: jobError } = await supabase
@@ -83,8 +90,11 @@ export default async function JobDetailPage({
   const isOwner = user?.id === job.employer_id;
 
   // Student viewers get a bookmark button; fetch role + whether this job is saved.
+  // A viewer who completed a contract for this job can also review the employer.
   let isStudent = false;
   let isSaved = false;
+  let reviewableContractId: string | null = null;
+  let myReview: { rating: number; comment: string | null } | null = null;
   if (user && !isOwner) {
     const { data: me } = await supabase
       .from("profiles")
@@ -100,6 +110,27 @@ export default async function JobDetailPage({
         .eq("job_id", job.id)
         .maybeSingle();
       isSaved = !!saved;
+    }
+
+    // Most-recent completed contract for this viewer on this job → can review.
+    const { data: reviewable } = await supabase
+      .from("contracts")
+      .select("id")
+      .eq("job_id", job.id)
+      .eq("student_id", user.id)
+      .eq("status", "Completed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (reviewable) {
+      reviewableContractId = reviewable.id;
+      const { data: existing } = await supabase
+        .from("reviews")
+        .select("rating, comment")
+        .eq("contract_id", reviewable.id)
+        .eq("reviewer_id", user.id)
+        .maybeSingle();
+      myReview = existing ?? null;
     }
   }
 
@@ -157,6 +188,12 @@ export default async function JobDetailPage({
       {reportOk && (
         <p className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400">
           Thanks — your report was sent to the admins.
+        </p>
+      )}
+      {contractError && <FormError>{contractError}</FormError>}
+      {contractOk && (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400">
+          {contractOk}
         </p>
       )}
       <div className="grid md:grid-cols-3 gap-8 items-start">
@@ -220,6 +257,14 @@ export default async function JobDetailPage({
           <FaqAccordion faqs={faqs} />
 
           <ReviewsSection reviews={reviews} avg={rAvg} count={rCount} />
+
+          {reviewableContractId && (
+            <ReviewForm
+              contractId={reviewableContractId}
+              existing={myReview}
+              redirectTo={`/jobs/${job.id}`}
+            />
+          )}
         </div>
 
         {/* Sidebar: pay + actions — pins under the navbar (h-20) on scroll.
