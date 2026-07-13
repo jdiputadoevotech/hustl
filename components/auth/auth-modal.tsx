@@ -60,7 +60,7 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
           </DialogTitle>
           <div className="grid md:grid-cols-[45%_1fr]">
             {/* Brand panel */}
-            <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-green-600 to-green-800 p-8 text-white md:flex">
+            <div className="relative hidden flex-col justify-between overflow-hidden bg-green-700 bg-gradient-to-br from-green-600 to-green-800 p-8 text-white md:flex">
               {/* Low-opacity texture — pure CSS, no image asset */}
               <div
                 aria-hidden
@@ -71,19 +71,19 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
                   backgroundSize: "22px 22px",
                 }}
               />
-              <div className="relative">
+              <div className="relative z-10">
                 <span className="text-4xl font-bold tracking-tight">
                   Hustl<span className="text-green-200">.</span>
                 </span>
-                <p className="mt-3 max-w-[22ch] text-lg font-medium text-green-50">
+                <p className="mt-3 max-w-[22ch] text-lg font-medium text-white">
                   The USC student marketplace for gigs and jobs.
                 </p>
               </div>
-              <ul className="relative flex flex-col gap-4">
+              <ul className="relative z-10 flex flex-col gap-4">
                 {VALUE_PROPS.map(({ icon: Icon, text }) => (
                   <li key={text} className="flex items-start gap-3">
-                    <Icon className="mt-0.5 h-5 w-5 shrink-0 text-green-100" />
-                    <span className="text-sm text-green-50">{text}</span>
+                    <Icon className="mt-0.5 h-5 w-5 shrink-0 text-white" />
+                    <span className="text-sm text-white">{text}</span>
                   </li>
                 ))}
               </ul>
