@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, Users, Briefcase, BadgeCheck } from "lucide-react";
+import { LayoutDashboard, Users, Briefcase, BadgeCheck, Flag } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { hasEnvVars } from "@/lib/utils";
@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/jobs", label: "Jobs", icon: Briefcase },
   { href: "/admin/verification", label: "Verification", icon: BadgeCheck },
+  { href: "/admin/reports", label: "Reports", icon: Flag },
 ];
 
 export async function AdminNav() {

@@ -26,6 +26,7 @@ import {
   type ReviewItem,
 } from "@/components/marketplace/review-list";
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
+import { ReportDialog } from "@/components/marketplace/report-dialog";
 import { FormError } from "@/components/marketplace/form-error";
 import { monthYear } from "@/lib/time";
 import type {
@@ -36,7 +37,11 @@ import type {
 } from "@/lib/types/database";
 
 type Params = Promise<{ id: string }>;
-type SearchParams = Promise<{ error?: string }>;
+type SearchParams = Promise<{
+  error?: string;
+  reportOk?: string;
+  reportError?: string;
+}>;
 
 /** Which socials render, in order, with their icon. */
 const SOCIAL_LINKS = [
@@ -64,7 +69,7 @@ export default async function ProfilePage({
   searchParams: SearchParams;
 }) {
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, reportOk, reportError } = await searchParams;
   const supabase = await createClient();
 
   const { data: profile, error: profileError } = await supabase
@@ -184,6 +189,12 @@ export default async function ProfilePage({
     // ponytail: mirrors app/jobs/[id] — narrow max-w-6xl + sticky sidebar.
     <div className="mx-auto max-w-6xl py-6 space-y-8">
       {error && <FormError>{error}</FormError>}
+      {reportError && <FormError>{reportError}</FormError>}
+      {reportOk && (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400">
+          Thanks — your report was sent to the admins.
+        </p>
+      )}
 
       {/* Header (full width, above the two-column split) */}
       <header className="flex flex-col gap-6 border-b pb-8 sm:flex-row sm:items-start sm:justify-between">
@@ -244,19 +255,30 @@ export default async function ProfilePage({
                 </Link>
               </Button>
             </>
-          ) : profile.messenger_username ? (
-            <Button asChild className="gap-2">
-              <a
-                href={`https://m.me/${profile.messenger_username}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <MessageCircle className="h-5 w-5" aria-hidden />
-                Contact me
-                <span className="sr-only"> (opens in new tab)</span>
-              </a>
-            </Button>
-          ) : null}
+          ) : (
+            <>
+              {profile.messenger_username && (
+                <Button asChild className="gap-2">
+                  <a
+                    href={`https://m.me/${profile.messenger_username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <MessageCircle className="h-5 w-5" aria-hidden />
+                    Contact me
+                    <span className="sr-only"> (opens in new tab)</span>
+                  </a>
+                </Button>
+              )}
+              {user && (
+                <ReportDialog
+                  targetType="profile"
+                  targetId={profile.id}
+                  redirectTo={`/profile/${profile.id}`}
+                />
+              )}
+            </>
+          )}
         </div>
       </header>
 

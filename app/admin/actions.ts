@@ -137,3 +137,39 @@ export async function setVerification(
   revalidatePath(`/profile/${id}`);
   redirect("/admin/verification");
 }
+
+// ---------- Reports ----------
+// Triage only: admins mark a report resolved/dismissed (or reopen it) and act on
+// the target via the existing Users/Jobs moderation. Reads/writes bypass RLS.
+
+async function setReportStatus(
+  id: string,
+  status: "open" | "resolved" | "dismissed",
+) {
+  const user = await requireAdmin();
+  const admin = createAdminClient();
+  const closing = status !== "open";
+  const { error } = await admin
+    .from("reports")
+    .update({
+      status,
+      resolved_by: closing ? user.id : null,
+      resolved_at: closing ? new Date().toISOString() : null,
+    })
+    .eq("id", id);
+  if (error) fail("/admin/reports", error.message);
+  revalidatePath("/admin/reports");
+  redirect(`/admin/reports?tab=${status === "open" ? "open" : status}`);
+}
+
+export async function resolveReport(id: string) {
+  await setReportStatus(id, "resolved");
+}
+
+export async function dismissReport(id: string) {
+  await setReportStatus(id, "dismissed");
+}
+
+export async function reopenReport(id: string) {
+  await setReportStatus(id, "open");
+}

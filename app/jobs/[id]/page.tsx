@@ -12,6 +12,8 @@ import { JobTypeBadge } from "@/components/marketplace/job-type-badge";
 import { ContactEmployerButton } from "@/components/marketplace/contact-employer-button";
 import { AuthModalButton } from "@/components/auth/auth-modal-button";
 import { SaveJobButton } from "@/components/marketplace/save-job-button";
+import { ReportDialog } from "@/components/marketplace/report-dialog";
+import { FormError } from "@/components/marketplace/form-error";
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
 import { FaqAccordion } from "@/components/marketplace/faq-accordion";
 import { QuickFaq } from "@/components/marketplace/quick-faq";
@@ -22,9 +24,17 @@ import { deleteJob, toggleJobVisibility } from "../actions";
 import type { Faq, JobType, PayPeriod } from "@/lib/types/database";
 
 type Params = Promise<{ id: string }>;
+type SearchParams = Promise<{ reportOk?: string; reportError?: string }>;
 
-export default async function JobDetailPage({ params }: { params: Params }) {
+export default async function JobDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: SearchParams;
+}) {
   const { id } = await params;
+  const { reportOk, reportError } = await searchParams;
   const supabase = await createClient();
 
   const { data: job, error: jobError } = await supabase
@@ -142,7 +152,13 @@ export default async function JobDetailPage({ params }: { params: Params }) {
 
   return (
     // ponytail: page-local width override — narrower than the global 1400px container in app/layout.tsx. Bump max-w-6xl to widen/narrow.
-    <div className="mx-auto max-w-6xl py-6">
+    <div className="mx-auto max-w-6xl py-6 space-y-4">
+      {reportError && <FormError>{reportError}</FormError>}
+      {reportOk && (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400">
+          Thanks — your report was sent to the admins.
+        </p>
+      )}
       <div className="grid md:grid-cols-3 gap-8 items-start">
         <div className="md:col-span-2 space-y-12">
         <div className="space-y-5">
@@ -284,6 +300,13 @@ export default async function JobDetailPage({ params }: { params: Params }) {
                 {isStudent && (
                   <SaveJobButton jobId={job.id} initialSaved={isSaved} />
                 )}
+                <div className="flex justify-center border-t pt-3">
+                  <ReportDialog
+                    targetType="job"
+                    targetId={job.id}
+                    redirectTo={`/jobs/${job.id}`}
+                  />
+                </div>
               </div>
             ) : (
               <div className="space-y-2">

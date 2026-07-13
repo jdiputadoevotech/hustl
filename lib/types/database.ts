@@ -146,7 +146,8 @@ export type NotificationType =
   | "offer_received"
   | "offer_status"
   | "verification_requested"
-  | "verification_decided";
+  | "verification_decided"
+  | "report_created";
 
 /**
  * An event shown in the navbar bell dropdown. Created only by SECURITY DEFINER
@@ -160,5 +161,37 @@ export interface Notification {
   body: string | null;
   link: string | null; // deep-link target, e.g. /contracts, /profile/{id}
   read: boolean;
+  created_at: string; // timestamptz
+}
+
+/** What a report points at. Both live in one table via a polymorphic target_id. */
+export type ReportTargetType = "profile" | "job";
+
+/** Why the reporter flagged the target. Drives the admin triage dropdown. */
+export type ReportReason =
+  | "spam"
+  | "harassment"
+  | "scam"
+  | "inappropriate"
+  | "other";
+
+/** Triage lifecycle. Admins move open -> resolved|dismissed (and back). */
+export type ReportStatus = "open" | "resolved" | "dismissed";
+
+/**
+ * A user's report against a profile or a job. target_id is polymorphic (no FK);
+ * see SETUP.md. Only admins read these (service-role client); the reported user
+ * has no visibility and is never notified.
+ */
+export interface Report {
+  id: string; // uuid
+  reporter_id: string; // uuid, FK -> profiles.id (who filed it)
+  target_type: ReportTargetType;
+  target_id: string; // profiles.id or jobs.id, depending on target_type
+  reason: ReportReason;
+  details: string | null;
+  status: ReportStatus;
+  resolved_by: string | null; // uuid, FK -> profiles.id (admin who closed it)
+  resolved_at: string | null; // timestamptz
   created_at: string; // timestamptz
 }

@@ -220,6 +220,7 @@ create table public.notifications (
   user_id    uuid not null references public.profiles (id) on delete cascade,
   type       text not null,  -- review_received | offer_received | offer_status
                              -- | verification_requested | verification_decided
+                             -- | report_created
   title      text not null,
   body       text,
   link       text,           -- deep-link target, e.g. /contracts, /profile/{id}
@@ -230,6 +231,33 @@ create index notifications_user_unread_idx
   on public.notifications (user_id, read, created_at desc);
 
 -- ============================================================
+-- REPORTS — a user flags a profile or job for admin review.
+-- target_id is polymorphic (profiles.id or jobs.id) so it carries NO FK;
+-- integrity is checked in the server action + the admin view. Only admins
+-- read/resolve reports (they use the service-role client, which bypasses RLS);
+-- the reported user has no visibility. A new report fans out a notification to
+-- every admin via the trigger below — the reported user is never notified.
+-- ============================================================
+create table public.reports (
+  id          uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references public.profiles (id) on delete cascade,
+  target_type text not null check (target_type in ('profile','job')),
+  target_id   uuid not null,                 -- profiles.id or jobs.id (polymorphic; no FK)
+  reason      text not null
+              check (reason in ('spam','harassment','scam','inappropriate','other')),
+  details     text,
+  status      text not null default 'open'
+              check (status in ('open','resolved','dismissed')),
+  resolved_by uuid references public.profiles (id) on delete set null,
+  resolved_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index reports_status_created_idx on public.reports (status, created_at desc);
+-- spam guard: at most one OPEN report per reporter per target
+create unique index reports_one_open_per_target
+  on public.reports (reporter_id, target_type, target_id) where status = 'open';
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
 alter table public.profiles      enable row level security;
@@ -238,6 +266,7 @@ alter table public.contracts     enable row level security;
 alter table public.reviews       enable row level security;
 alter table public.saved_jobs    enable row level security;
 alter table public.notifications enable row level security;
+alter table public.reports       enable row level security;
 
 -- ---------- PROFILES ----------
 drop policy if exists "Profiles are viewable by everyone" on public.profiles;
@@ -408,6 +437,18 @@ drop policy if exists "Users can delete their notifications" on public.notificat
 create policy "Users can delete their notifications"
   on public.notifications for delete using (auth.uid() = user_id);
 
+-- ---------- REPORTS ----------
+-- INSERT only for signed-in users (as themselves; can't report their own
+-- profile). No SELECT/UPDATE/DELETE policy on purpose: normal users — including
+-- the reported user — can never read reports. Admins read/resolve them through
+-- the service-role client, which bypasses RLS.
+drop policy if exists "Users can file reports" on public.reports;
+create policy "Users can file reports"
+  on public.reports for insert with check (
+    reporter_id = auth.uid()
+    and not (target_type = 'profile' and target_id = auth.uid())
+  );
+
 -- ============================================================
 -- NOTIFICATION TRIGGERS
 -- All SECURITY DEFINER so the insert happens whatever the acting role
@@ -545,6 +586,29 @@ drop trigger if exists notify_on_verification on public.profiles;
 create trigger notify_on_verification
   after update of verification_status on public.profiles
   for each row execute function public.notify_on_verification();
+
+-- New report: notify every admin. Same fan-out as verification requests. The
+-- reported user is never targeted, so they get no notification.
+create or replace function public.notify_on_report()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.notifications (user_id, type, title, body, link)
+  select p.id, 'report_created', 'New report',
+         'A ' || new.target_type || ' was reported.',
+         '/admin/reports'
+  from public.profiles p
+  where p.role = 'admin';
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_on_report_insert on public.reports;
+create trigger notify_on_report_insert
+  after insert on public.reports
+  for each row execute function public.notify_on_report();
 
 -- ============================================================
 -- AUTO-CREATE PROFILE ON SIGNUP
