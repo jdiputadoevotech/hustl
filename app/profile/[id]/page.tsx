@@ -427,9 +427,11 @@ export default async function ProfilePage({
         </div>
 
         {/* Sidebar: establishment + stats, then owner-only verification. */}
-        <aside className="md:col-span-1 md:self-stretch">
-          <div className="sticky top-24 space-y-4">
-            <div className="rounded-xl border bg-background p-6 space-y-4">
+        {/* space-y-4 lives on the aside so the sticky card's containing block
+            IS the stretched aside — an intermediate wrapper would collapse to
+            content height and remove the room the sticky card needs to pin. */}
+        <aside className="md:col-span-1 md:self-stretch space-y-4">
+          <div className="sticky top-24 rounded-xl border bg-background p-6 space-y-4">
               {showEstablishment && (
                 <>
                   <div className="space-y-3">
@@ -538,7 +540,6 @@ export default async function ProfilePage({
                 )}
               </>
             )}
-          </div>
         </aside>
       </div>
     </div>

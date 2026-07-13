@@ -34,7 +34,7 @@ export async function Navbar() {
   }
 
   return (
-    <nav className="w-full border-b bg-background sticky top-0 z-10">
+    <nav className="w-full border-b bg-background sticky top-0 z-30">
       <div className="mx-auto w-full max-w-[1400px] flex items-center gap-6 sm:gap-8 px-6 lg:px-8 h-20">
         {/* Logo */}
         <Link href="/" className="text-4xl font-bold tracking-tight shrink-0">

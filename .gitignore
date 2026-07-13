@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# seed data (local demo only)
+/SEED.md
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

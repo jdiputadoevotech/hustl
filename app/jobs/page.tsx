@@ -57,6 +57,7 @@ export default async function JobsPage({
   const user = await getCurrentUser();
   let isEmployer = false;
   let isStudent = false;
+  let isAdmin = false;
   const savedIds = new Set<string>();
   if (user) {
     const { data: me } = await supabase
@@ -66,6 +67,7 @@ export default async function JobsPage({
       .single();
     isEmployer = me?.role === "employer";
     isStudent = me?.role === "student";
+    isAdmin = me?.role === "admin";
     if (isStudent) {
       const { data: saved } = await supabase
         .from("saved_jobs")
@@ -90,36 +92,39 @@ export default async function JobsPage({
         </p>
       </div>
 
-      {/* Filter row */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3 flex-wrap">
-          <CategoryFilter selected={category} />
-          <JobTypeFilter selected={type} />
-          <BudgetFilter max={max} />
-        </div>
-        {isEmployer && (
-          <Button asChild size="sm">
-            <Link href="/jobs/new">Post a job</Link>
-          </Button>
-        )}
-      </div>
-
-      <hr className="border-border" />
-
-      {/* Count + sort */}
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground">
-          {count.toLocaleString()} {count === 1 ? "job" : "jobs"}
-          {selectedCategory && (
-            <>
-              {" in "}
-              <span className="font-medium text-foreground">
-                {selectedCategory.name}
-              </span>
-            </>
+      {/* Filters — sticky under the navbar (h-20 = top-20). Admins also get the
+          AdminNav (h-11) stacked below the navbar, so offset by 20+11 = 7.75rem
+          for them. Full-bleed bg covers cards scrolling underneath; z-10. */}
+      <div
+        className={`sticky ${isAdmin ? "top-[7.75rem]" : "top-20"} z-10 -mx-6 lg:-mx-8 flex flex-col gap-4 border-b bg-background px-6 lg:px-8 py-4`}
+      >
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
+            <CategoryFilter selected={category} />
+            <JobTypeFilter selected={type} />
+            <BudgetFilter max={max} />
+          </div>
+          {isEmployer && (
+            <Button asChild size="sm">
+              <Link href="/jobs/new">Post a job</Link>
+            </Button>
           )}
-        </p>
-        <SortDropdown selected={activeSort} />
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
+            {count.toLocaleString()} {count === 1 ? "job" : "jobs"}
+            {selectedCategory && (
+              <>
+                {" in "}
+                <span className="font-medium text-foreground">
+                  {selectedCategory.name}
+                </span>
+              </>
+            )}
+          </p>
+          <SortDropdown selected={activeSort} />
+        </div>
       </div>
 
       {count === 0 ? (
