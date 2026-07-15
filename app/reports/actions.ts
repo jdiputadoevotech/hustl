@@ -45,6 +45,17 @@ export async function createReport(formData: FormData) {
 
   const supabase = await createClient();
 
+  // Flagged users are write-locked. RLS blocks the insert too; this is the
+  // friendly message.
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("flagged_at")
+    .eq("id", user.id)
+    .single();
+  if (me?.flagged_at) {
+    back("reportError=" + encodeURIComponent("Your account is restricted, so you can't file reports."));
+  }
+
   // A review's author can't report their own review.
   if (targetType === "review") {
     const { data: review } = await supabase

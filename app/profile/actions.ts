@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser, canBecomeEmployer } from "@/lib/auth";
 import type { Socials } from "@/lib/types/database";
 
@@ -105,27 +104,24 @@ export async function requestVerification() {
 }
 
 /**
- * Permanently deletes the user's account. Uses the service-role admin client to
- * delete the auth.users record, which cascades to profiles and everything the
- * profile owns (jobs, contracts, saved jobs). Reviews the user *wrote* are kept
- * — their reviewer_id is set null so the employer's rating history survives (the
- * review then renders as "Deleted user"). Blocked while any contract is still
- * live so a counterparty never loses in-flight work. Clears cookies at the end.
+ * Soft-deletes (deactivates) the user's account. Sets profiles.deactivated_at
+ * on the owner's own row — nothing is dropped, the auth.users record is kept, so
+ * the account can be restored later. The proxy then hides the user everywhere:
+ * their jobs drop off public surfaces (jobs_with_employer view filters
+ * deactivated_at is null) and any request routes them to /reactivate. Reviews
+ * they *wrote* stay visible. Blocked while any contract is still live so a
+ * counterparty never loses in-flight work. Signs out at the end; to come back
+ * the user logs in again and reactivates. The owner may set deactivated_at
+ * directly — it is intentionally not guarded by profiles_guard_admin_fields.
  */
-export async function deleteAccount() {
+export async function deactivateAccount() {
   const user = await getCurrentUser();
   if (!user) redirect("/auth/login");
 
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    redirect(
-      `/profile/edit?error=${encodeURIComponent("Account deletion isn't configured. Contact support.")}`,
-    );
-  }
-
   const supabase = await createClient();
 
-  // Block deletion while any contract is still live (Offered/Accepted) for
-  // either party — deleting would silently strip the counterparty's pending or
+  // Block deactivation while any contract is still live (Offered/Accepted) for
+  // either party — going dark would silently strip the counterparty's pending or
   // in-flight work. They must complete, decline, or resign it first.
   const { data: live } = await supabase
     .from("contracts")
@@ -135,18 +131,42 @@ export async function deleteAccount() {
     .limit(1);
   if (live && live.length > 0) {
     redirect(
-      `/profile/edit?error=${encodeURIComponent("You have active or pending contracts. Complete, decline, or resign them before deleting your account.")}`,
+      `/profile/edit?error=${encodeURIComponent("You have active or pending contracts. Complete, decline, or resign them before deactivating your account.")}`,
     );
   }
 
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.deleteUser(user.id);
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ deactivated_at: now, updated_at: now })
+    .eq("id", user.id);
   if (error) {
     redirect(`/profile/edit?error=${encodeURIComponent(error.message)}`);
   }
 
-  // The auth user is gone; clear the now-orphaned session cookies.
   await supabase.auth.signOut();
-
   redirect("/");
+}
+
+/**
+ * Reactivates a previously deactivated account: clears profiles.deactivated_at
+ * on the owner's own row, un-hiding their profile and republishing their jobs.
+ * Reachable because the proxy allowlists /reactivate for deactivated users
+ * (their session is kept, not signed out).
+ */
+export async function reactivateAccount() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth/login");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ deactivated_at: null, updated_at: new Date().toISOString() })
+    .eq("id", user.id);
+  if (error) {
+    redirect(`/reactivate?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/dashboard");
 }

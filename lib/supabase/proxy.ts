@@ -73,13 +73,22 @@ export async function updateSession(request: NextRequest) {
   if (user && !pathname.startsWith("/suspended") && !pathname.startsWith("/auth")) {
     const { data: me } = await supabase
       .from("profiles")
-      .select("archived")
+      .select("archived, deactivated_at")
       .eq("id", user.sub as string)
       .single();
     if (me?.archived) {
       await supabase.auth.signOut();
       const url = request.nextUrl.clone();
       url.pathname = "/suspended";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+    // Self-deactivated (soft delete): unlike archived, keep the session alive —
+    // the user needs it to reactivate — and pen them to /reactivate. The outer
+    // guard already lets /auth through, so they can still log out instead.
+    if (me?.deactivated_at && !pathname.startsWith("/reactivate")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/reactivate";
       url.search = "";
       return NextResponse.redirect(url);
     }

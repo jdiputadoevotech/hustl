@@ -67,6 +67,10 @@ export interface Profile {
   socials: Socials; // jsonb, defaults to {}
   contracts_hidden: boolean; // student hides their contracts from public profile
   archived: boolean; // admin-only; archived users are locked out (proxy-enforced)
+  flagged_at: string | null; // admin soft restriction; null = not flagged. Flagged users stay logged in but are write-locked (RLS-enforced). Step before `archived`.
+  flag_reason: string | null; // admin's note on why the user was flagged
+  flagged_by: string | null; // uuid, FK -> profiles.id (admin who flagged)
+  deactivated_at: string | null; // self soft-delete; null = active (distinct from admin `archived`)
   verification_status: VerificationStatus;
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
@@ -148,7 +152,8 @@ export type NotificationType =
   | "offer_status"
   | "verification_requested"
   | "verification_decided"
-  | "report_created";
+  | "report_created"
+  | "appeal_created";
 
 /**
  * An event shown in the navbar bell dropdown. Created only by SECURITY DEFINER
@@ -194,5 +199,23 @@ export interface Report {
   status: ReportStatus;
   resolved_by: string | null; // uuid, FK -> profiles.id (admin who closed it)
   resolved_at: string | null; // timestamptz
+  created_at: string; // timestamptz
+}
+
+/** Appeal lifecycle. Admins move open -> approved (lifts the flag) | denied. */
+export type AppealStatus = "open" | "approved" | "denied";
+
+/**
+ * A flagged user's appeal of their restriction. Only the flagged user files one
+ * (RLS); admins read/resolve via the service-role client. Approving clears the
+ * user's flagged_at (done in the resolveAppeal server action). See SETUP.md.
+ */
+export interface FlagAppeal {
+  id: string; // uuid
+  user_id: string; // uuid, FK -> profiles.id (the appellant)
+  message: string;
+  status: AppealStatus;
+  reviewed_by: string | null; // uuid, FK -> profiles.id (admin who resolved it)
+  reviewed_at: string | null; // timestamptz
   created_at: string; // timestamptz
 }

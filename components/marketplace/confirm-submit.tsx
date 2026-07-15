@@ -15,7 +15,7 @@ import {
 
 interface ConfirmSubmitProps {
   /** Bound server action to run once the user confirms. */
-  action: () => void;
+  action: (formData: FormData) => void | Promise<void>;
   /** Text on the trigger button shown in the list. */
   label: string;
   confirmTitle: string;
@@ -24,6 +24,8 @@ interface ConfirmSubmitProps {
   confirmLabel?: string;
   variant?: ButtonProps["variant"];
   size?: ButtonProps["size"];
+  /** Optional extra form fields (e.g. a reason input) rendered inside the form. */
+  children?: React.ReactNode;
 }
 
 /**
@@ -39,6 +41,7 @@ export function ConfirmSubmit({
   confirmLabel,
   variant = "destructive",
   size,
+  children,
 }: ConfirmSubmitProps) {
   return (
     <AlertDialog>
@@ -53,6 +56,7 @@ export function ConfirmSubmit({
           <AlertDialogDescription>{confirmBody}</AlertDialogDescription>
         </AlertDialogHeader>
         <form action={action}>
+          {children}
           <AlertDialogFooter>
             <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
             <SubmitButton variant={variant}>

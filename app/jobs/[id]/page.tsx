@@ -50,7 +50,7 @@ export default async function JobDetailPage({
   const { data: job, error: jobError } = await supabase
     .from("jobs")
     .select(
-      "id, title, description, job_type, category, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, faqs, is_disabled, created_at, employer_id, profiles ( id, full_name, establishment_name, messenger_username )",
+      "id, title, description, job_type, category, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, faqs, is_disabled, created_at, employer_id, profiles ( id, full_name, establishment_name, messenger_username, deactivated_at )",
     )
     .eq("id", id)
     .maybeSingle();
@@ -63,7 +63,12 @@ export default async function JobDetailPage({
     full_name: string | null;
     establishment_name: string | null;
     messenger_username: string | null;
+    deactivated_at: string | null;
   } | null;
+
+  // Employer soft-deleted their account → the job is hidden everywhere public
+  // (the jobs_with_employer view drops it too). Treat a direct link as missing.
+  if (employer?.deactivated_at) notFound();
 
   // Reviews are about employers. Fetch the full list (with each reviewer's
   // name) so we can show individual reviews, then derive the aggregate from it.

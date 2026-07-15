@@ -33,6 +33,18 @@ export async function submitReview(contractId: string, formData: FormData) {
   }
 
   const supabase = await createClient();
+
+  // Flagged users are write-locked. RLS blocks the insert too; this is the
+  // friendly message.
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("flagged_at")
+    .eq("id", user.id)
+    .single();
+  if (me?.flagged_at) {
+    redirect(`${base}?contractError=${encodeURIComponent("Your account is restricted, so you can't leave a review.")}`);
+  }
+
   const { data: contract } = await supabase
     .from("contracts")
     .select("id, employer_id, student_id, status")

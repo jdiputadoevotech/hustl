@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { Navbar } from "@/components/navbar";
 import { AdminNav } from "@/components/admin-nav";
+import { FlaggedBanner } from "@/components/flagged-banner";
 import { Footer } from "@/components/footer";
 import { SiteShell } from "@/components/site-shell";
 import "./globals.css";
@@ -34,6 +35,7 @@ export default function RootLayout({
         <SiteShell
           navbar={<Navbar />}
           adminNav={<AdminNav />}
+          banner={<FlaggedBanner />}
           footer={<Footer />}
         >
           {children}

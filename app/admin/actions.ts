@@ -68,6 +68,46 @@ export async function setUserArchived(id: string, archived: boolean) {
 }
 
 /**
+ * Soft restriction (the step before archive): a flagged user stays logged in and
+ * can browse, but RLS write-locks them (no posting jobs, reviews, contracts,
+ * reports, saves). Reversible via setUserUnflagged or an approved appeal.
+ */
+export async function setUserFlagged(id: string, formData: FormData) {
+  const user = await requireAdmin();
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({
+      flagged_at: new Date().toISOString(),
+      flag_reason: reason,
+      flagged_by: user.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) fail("/admin/users", error.message);
+  revalidatePath("/admin/users");
+  redirect("/admin/users?tab=flagged");
+}
+
+export async function setUserUnflagged(id: string) {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({
+      flagged_at: null,
+      flag_reason: null,
+      flagged_by: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) fail("/admin/users", error.message);
+  revalidatePath("/admin/users");
+  redirect("/admin/users?tab=active");
+}
+
+/**
  * Permanently deletes a user: removes the auth.users row, which cascades to
  * their profile, jobs, contracts, and saved jobs (reviews they wrote survive
  * with reviewer_id nulled). Blocked while either party has a live contract, so
@@ -172,6 +212,53 @@ export async function dismissReport(id: string) {
 
 export async function reopenReport(id: string) {
   await setReportStatus(id, "open");
+}
+
+// ---------- Flag appeals ----------
+// A flagged user appeals; the admin approves (which lifts the flag) or denies
+// (the restriction stands). Reads/writes bypass RLS via the service-role client.
+
+export async function resolveAppeal(
+  id: string,
+  decision: "approved" | "denied",
+) {
+  const user = await requireAdmin();
+  const admin = createAdminClient();
+
+  const { data: appeal, error: readError } = await admin
+    .from("flag_appeals")
+    .select("user_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) fail("/admin/appeals", readError.message);
+  if (!appeal) fail("/admin/appeals", "Appeal not found.");
+
+  const { error } = await admin
+    .from("flag_appeals")
+    .update({
+      status: decision,
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) fail("/admin/appeals", error.message);
+
+  // Approving an appeal lifts the flag.
+  if (decision === "approved") {
+    await admin
+      .from("profiles")
+      .update({
+        flagged_at: null,
+        flag_reason: null,
+        flagged_by: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", appeal.user_id);
+    revalidatePath("/admin/users");
+  }
+
+  revalidatePath("/admin/appeals");
+  redirect(`/admin/appeals?tab=${decision}`);
 }
 
 // ---------- Reviews ----------

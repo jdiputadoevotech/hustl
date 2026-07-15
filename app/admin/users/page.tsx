@@ -15,6 +15,8 @@ import { monthYear } from "@/lib/time";
 import {
   setUserRole,
   setUserArchived,
+  setUserFlagged,
+  setUserUnflagged,
   deleteUser,
   addAdminByEmail,
 } from "@/app/admin/actions";
@@ -26,6 +28,8 @@ type UserRow = Pick<
   | "full_name"
   | "role"
   | "archived"
+  | "flagged_at"
+  | "flag_reason"
   | "verification_status"
   | "messenger_username"
   | "created_at"
@@ -59,7 +63,7 @@ export default async function AdminUsersPage({
   let query = supabase
     .from("profiles")
     .select(
-      "id, full_name, role, archived, verification_status, messenger_username, created_at",
+      "id, full_name, role, archived, flagged_at, flag_reason, verification_status, messenger_username, created_at",
     )
     .order("created_at", { ascending: false });
   if (q) query = query.ilike("full_name", `%${q}%`);
@@ -74,15 +78,18 @@ export default async function AdminUsersPage({
 
   const counts = {
     active: all.filter((u) => !u.archived && u.role !== "admin").length,
+    flagged: all.filter((u) => u.flagged_at && u.role !== "admin").length,
     archived: all.filter((u) => u.archived).length,
     admins: all.filter((u) => u.role === "admin").length,
   };
   const inTab = (u: UserRow) =>
     tab === "archived"
       ? u.archived
-      : tab === "admins"
-        ? u.role === "admin"
-        : !u.archived && u.role !== "admin";
+      : tab === "flagged"
+        ? Boolean(u.flagged_at) && u.role !== "admin"
+        : tab === "admins"
+          ? u.role === "admin"
+          : !u.archived && u.role !== "admin";
   // Role + verification filters apply to the Users/Archived tabs.
   const rows = all.filter(
     (u) =>
@@ -104,6 +111,7 @@ export default async function AdminUsersPage({
         current={tab}
         tabs={[
           { key: "active", label: "Users", count: counts.active },
+          { key: "flagged", label: "Flagged", count: counts.flagged },
           { key: "archived", label: "Archived", count: counts.archived },
           { key: "admins", label: "Admins", count: counts.admins },
         ]}
@@ -164,9 +172,19 @@ export default async function AdminUsersPage({
                     <Badge variant="outline" className="capitalize">
                       {u.role}
                     </Badge>
+                    {u.flagged_at && (
+                      <Badge className="border-transparent bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        Flagged
+                      </Badge>
+                    )}
                     <span>Verification: {V_LABEL[u.verification_status]}</span>
                     <span>Joined {monthYear(u.created_at)}</span>
                   </div>
+                  {u.flagged_at && u.flag_reason && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Reason: {u.flag_reason}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -196,6 +214,39 @@ export default async function AdminUsersPage({
                       </SubmitButton>
                     </form>
                   )}
+
+                  {u.role !== "admin" &&
+                    (u.flagged_at ? (
+                      <form action={setUserUnflagged.bind(null, u.id)}>
+                        <SubmitButton variant="outline" size="sm">
+                          Unflag
+                        </SubmitButton>
+                      </form>
+                    ) : (
+                      <ConfirmSubmit
+                        action={setUserFlagged.bind(null, u.id)}
+                        label="Flag"
+                        variant="outline"
+                        size="sm"
+                        confirmTitle="Flag this user?"
+                        confirmBody="They stay logged in and can browse, but can't post jobs, leave reviews, offer/accept contracts, file reports, or save jobs until unflagged. They can appeal."
+                        confirmLabel="Flag user"
+                      >
+                        <label
+                          htmlFor={`flag-reason-${u.id}`}
+                          className="text-sm font-medium"
+                        >
+                          Reason (optional, shown to the user)
+                        </label>
+                        <textarea
+                          id={`flag-reason-${u.id}`}
+                          name="reason"
+                          rows={3}
+                          placeholder="e.g. Repeated inappropriate job postings."
+                          className="mb-4 mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        />
+                      </ConfirmSubmit>
+                    ))}
 
                   {u.archived ? (
                     <form action={setUserArchived.bind(null, u.id, false)}>

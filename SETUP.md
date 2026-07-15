@@ -117,6 +117,22 @@ create table if not exists public.profiles (
   -- their live sessions killed) by the proxy. Only the service-role admin client
   -- may flip this (guarded by profiles_guard_admin_fields below).
   archived           boolean not null default false,
+  -- Admin soft restriction (the step BEFORE archived): a flagged user stays
+  -- logged in and can still browse, but is write-locked — RLS blocks them from
+  -- posting jobs, leaving reviews, offering/accepting contracts, filing reports,
+  -- and saving jobs. Unlike archived it does NOT sign them out. Only the
+  -- service-role admin client may set these (guarded below). flagged_at null =
+  -- not flagged; flag_reason/flagged_by are the audit trail. The user may appeal
+  -- via /appeal (flag_appeals table); an admin clears these to lift it.
+  flagged_at         timestamptz,
+  flag_reason        text,
+  flagged_by         uuid references public.profiles (id) on delete set null,
+  -- Self-service soft delete: when set, the account is deactivated. The proxy
+  -- keeps the session but routes the owner to /reactivate (NOT signed out, unlike
+  -- archived); their jobs are hidden from public surfaces via the
+  -- jobs_with_employer view. Cleared on reactivation. Intentionally NOT guarded by
+  -- profiles_guard_admin_fields, so the owner may set/clear it themselves.
+  deactivated_at     timestamptz,
   -- Verification: 'none' -> 'pending' (user requests) -> 'verified'|'rejected'
   -- (admin decides). Only service role may set verified/rejected; the owner may
   -- only request (->pending) or withdraw (->none). Both enforced by the trigger.
@@ -221,7 +237,7 @@ create table public.notifications (
   user_id    uuid not null references public.profiles (id) on delete cascade,
   type       text not null,  -- review_received | offer_received | offer_status
                              -- | verification_requested | verification_decided
-                             -- | report_created
+                             -- | report_created | appeal_created
   title      text not null,
   body       text,
   link       text,           -- deep-link target, e.g. /contracts, /profile/{id}
@@ -259,6 +275,28 @@ create unique index reports_one_open_per_target
   on public.reports (reporter_id, target_type, target_id) where status = 'open';
 
 -- ============================================================
+-- FLAG_APPEALS — a flagged user appeals their restriction for admin review.
+-- Only the flagged user may file one (checked in the INSERT policy); admins
+-- read/resolve via the service-role client (bypasses RLS). Approving an appeal
+-- clears the user's flagged_at (done in the resolveAppeal server action). A new
+-- appeal fans out a notification to every admin via the trigger below.
+-- ============================================================
+create table public.flag_appeals (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references public.profiles (id) on delete cascade,
+  message     text not null,
+  status      text not null default 'open'
+              check (status in ('open','approved','denied')),
+  reviewed_by uuid references public.profiles (id) on delete set null,
+  reviewed_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index flag_appeals_status_created_idx on public.flag_appeals (status, created_at desc);
+-- spam guard: at most one OPEN appeal per user
+create unique index flag_appeals_one_open
+  on public.flag_appeals (user_id) where status = 'open';
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
 alter table public.profiles      enable row level security;
@@ -268,6 +306,7 @@ alter table public.reviews       enable row level security;
 alter table public.saved_jobs    enable row level security;
 alter table public.notifications enable row level security;
 alter table public.reports       enable row level security;
+alter table public.flag_appeals  enable row level security;
 
 -- ---------- PROFILES ----------
 drop policy if exists "Profiles are viewable by everyone" on public.profiles;
@@ -289,6 +328,8 @@ create policy "Users can delete their own profile"
 -- definer, so current_user reflects the caller: 'service_role' for the admin
 -- client (bypasses RLS), 'authenticated' for a normal signed-in request.
 --   * archived              -> only service_role may change it.
+--   * flagged_at/flag_reason/flagged_by -> only service_role (same as archived);
+--                              otherwise a flagged user could self-clear the flag.
 --   * verification_status   -> owner may only move to 'pending' or 'none';
 --                              'verified'/'rejected' require service_role.
 create or replace function public.profiles_guard_admin_fields()
@@ -301,6 +342,11 @@ begin
   end if;
   if new.archived is distinct from old.archived then
     raise exception 'archived can only be changed by an administrator';
+  end if;
+  if new.flagged_at  is distinct from old.flagged_at
+     or new.flag_reason is distinct from old.flag_reason
+     or new.flagged_by  is distinct from old.flagged_by then
+    raise exception 'flag fields can only be changed by an administrator';
   end if;
   if new.verification_status is distinct from old.verification_status
      and new.verification_status not in ('pending','none') then
@@ -320,14 +366,14 @@ drop policy if exists "Jobs are viewable by everyone" on public.jobs;
 create policy "Jobs are viewable by everyone"
   on public.jobs for select using (true);
 
--- Only employers may post a job, as themselves.
+-- Only employers may post a job, as themselves. Flagged users are write-locked.
 drop policy if exists "Users can post jobs" on public.jobs;
 create policy "Users can post jobs"
   on public.jobs for insert with check (
     employer_id = auth.uid()
     and exists (
       select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'employer'
+      where p.id = auth.uid() and p.role = 'employer' and p.flagged_at is null
     )
   );
 
@@ -356,6 +402,7 @@ create policy "Contracts visible to the parties"
   );
 
 -- Only the job's employer creates an offer, as themselves, in 'Offered' state.
+-- Flagged employers are write-locked and can't offer.
 drop policy if exists "Employers can offer contracts" on public.contracts;
 create policy "Employers can offer contracts"
   on public.contracts for insert
@@ -363,14 +410,26 @@ create policy "Employers can offer contracts"
     employer_id = auth.uid()
     and status = 'Offered'
     and employer_id = (select j.employer_id from public.jobs j where j.id = job_id)
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
+    )
   );
 
 -- Either party may update the row; the legal transition is enforced in the app.
+-- Flagged users are write-locked (can't accept/complete/resign) until an admin
+-- lifts the flag.
 drop policy if exists "Parties can update a contract" on public.contracts;
 create policy "Parties can update a contract"
   on public.contracts for update
   using (auth.uid() = employer_id or auth.uid() = student_id)
-  with check (auth.uid() = employer_id or auth.uid() = student_id);
+  with check (
+    (auth.uid() = employer_id or auth.uid() = student_id)
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
+    )
+  );
 
 -- ---------- REVIEWS ----------
 drop policy if exists "Reviews are viewable by everyone" on public.reviews;
@@ -378,6 +437,7 @@ create policy "Reviews are viewable by everyone"
   on public.reviews for select using (true);
 
 -- The student may review the employer only for a Completed contract of theirs.
+-- Flagged reviewers are write-locked.
 drop policy if exists "Students can review completed employers" on public.reviews;
 create policy "Students can review completed employers"
   on public.reviews for insert
@@ -389,6 +449,10 @@ create policy "Students can review completed employers"
         and c.student_id = auth.uid()
         and c.employer_id = reviews.employer_id
         and c.status = 'Completed'
+    )
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
     )
   );
 
@@ -411,14 +475,14 @@ drop policy if exists "Students can view their saved jobs" on public.saved_jobs;
 create policy "Students can view their saved jobs"
   on public.saved_jobs for select using (auth.uid() = student_id);
 
--- Only a student may bookmark, as themselves.
+-- Only a student may bookmark, as themselves. Flagged users are write-locked.
 drop policy if exists "Students can save jobs" on public.saved_jobs;
 create policy "Students can save jobs"
   on public.saved_jobs for insert with check (
     student_id = auth.uid()
     and exists (
       select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'student'
+      where p.id = auth.uid() and p.role = 'student' and p.flagged_at is null
     )
   );
 
@@ -452,6 +516,28 @@ create policy "Users can file reports"
   on public.reports for insert with check (
     reporter_id = auth.uid()
     and not (target_type = 'profile' and target_id = auth.uid())
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
+    )
+  );
+
+-- ---------- FLAG_APPEALS ----------
+-- A user may read their own appeals and file one only while actually flagged.
+-- No UPDATE/DELETE policy: admins resolve appeals via the service-role client
+-- (bypasses RLS), same as reports.
+drop policy if exists "Users can view their appeals" on public.flag_appeals;
+create policy "Users can view their appeals"
+  on public.flag_appeals for select using (auth.uid() = user_id);
+
+drop policy if exists "Flagged users can file appeals" on public.flag_appeals;
+create policy "Flagged users can file appeals"
+  on public.flag_appeals for insert with check (
+    user_id = auth.uid()
+    and exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
+    )
   );
 
 -- ============================================================
@@ -615,6 +701,28 @@ create trigger notify_on_report_insert
   after insert on public.reports
   for each row execute function public.notify_on_report();
 
+-- New flag appeal: notify every admin, same fan-out as reports.
+create or replace function public.notify_on_appeal()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.notifications (user_id, type, title, body, link)
+  select p.id, 'appeal_created', 'New flag appeal',
+         'A flagged user submitted an appeal.',
+         '/admin/appeals'
+  from public.profiles p
+  where p.role = 'admin';
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_on_appeal_insert on public.flag_appeals;
+create trigger notify_on_appeal_insert
+  after insert on public.flag_appeals
+  for each row execute function public.notify_on_appeal();
+
 -- ============================================================
 -- AUTO-CREATE PROFILE ON SIGNUP
 -- Default display name = signup full_name, else the email local-part.
@@ -685,6 +793,7 @@ select
 from public.jobs j
 left join public.profiles p on p.id = j.employer_id
 left join public.reviews  r on r.employer_id = j.employer_id and r.archived = false
+where p.deactivated_at is null  -- hide jobs of self-deactivated employers
 group by j.id, p.full_name, p.establishment_name, p.verification_status;
 ```
 
@@ -933,6 +1042,209 @@ alter table public.reviews drop constraint if exists reviews_contract_id_fkey;
 alter table public.reviews
   add constraint reviews_contract_id_fkey
   foreign key (contract_id) references public.contracts (id) on delete set null;
+```
+
+### Already ran the Fresh Migration? Add self-service account deactivation
+
+Converts account deletion from a hard delete to a reversible soft delete. Adds
+`profiles.deactivated_at` (null = active) and refreshes the view so deactivated
+employers' jobs drop off public surfaces. The column is intentionally left out of
+the `profiles_guard_admin_fields` trigger, so the owner can set/clear it (deactivate
+and reactivate) on their own RLS client. Idempotent.
+
+```sql
+alter table public.profiles
+  add column if not exists deactivated_at timestamptz;
+
+-- Refresh the view to hide deactivated employers' jobs. Column list is unchanged,
+-- so create-or-replace is safe (no drop needed).
+create or replace view public.jobs_with_employer as
+select
+  j.*,
+  p.full_name as employer_name,
+  p.establishment_name as employer_establishment_name,
+  p.verification_status as employer_verification_status,
+  coalesce(round(avg(r.rating), 1), 0)::numeric(2, 1) as employer_rating_avg,
+  count(r.id) as employer_rating_count
+from public.jobs j
+left join public.profiles p on p.id = j.employer_id
+left join public.reviews  r on r.employer_id = j.employer_id and r.archived = false
+where p.deactivated_at is null
+group by j.id, p.full_name, p.establishment_name, p.verification_status;
+```
+
+---
+
+### Already ran the Fresh Migration? Add admin user flagging + appeals
+
+Adds a soft restriction (the step before `archived`): an admin flags a user, who
+stays logged in and can browse but is write-locked — RLS blocks posting jobs,
+reviewing, offering/accepting contracts, filing reports, and saving jobs. The
+user can appeal via `/appeal`; admins resolve appeals at `/admin/appeals`
+(approving lifts the flag). Adds `profiles.flagged_at/flag_reason/flagged_by`
+(guarded like `archived`), the `flag_appeals` table, retightens the five write
+gates, and fans new appeals out to admins. Idempotent.
+
+```sql
+-- 1. Flag columns on profiles (admin-only; guarded below).
+alter table public.profiles
+  add column if not exists flagged_at  timestamptz,
+  add column if not exists flag_reason text,
+  add column if not exists flagged_by  uuid references public.profiles (id) on delete set null;
+
+-- 2. Guard the new columns (service_role only), same as archived.
+create or replace function public.profiles_guard_admin_fields()
+returns trigger
+language plpgsql
+as $$
+begin
+  if current_user = 'service_role' then
+    return new;
+  end if;
+  if new.archived is distinct from old.archived then
+    raise exception 'archived can only be changed by an administrator';
+  end if;
+  if new.flagged_at  is distinct from old.flagged_at
+     or new.flag_reason is distinct from old.flag_reason
+     or new.flagged_by  is distinct from old.flagged_by then
+    raise exception 'flag fields can only be changed by an administrator';
+  end if;
+  if new.verification_status is distinct from old.verification_status
+     and new.verification_status not in ('pending','none') then
+    raise exception 'verification_status can only be set to that value by an administrator';
+  end if;
+  return new;
+end;
+$$;
+
+-- 3. Retighten the five write gates to exclude flagged users.
+drop policy if exists "Users can post jobs" on public.jobs;
+create policy "Users can post jobs"
+  on public.jobs for insert with check (
+    employer_id = auth.uid()
+    and exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.role = 'employer' and p.flagged_at is null
+    )
+  );
+
+drop policy if exists "Employers can offer contracts" on public.contracts;
+create policy "Employers can offer contracts"
+  on public.contracts for insert
+  with check (
+    employer_id = auth.uid()
+    and status = 'Offered'
+    and employer_id = (select j.employer_id from public.jobs j where j.id = job_id)
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
+    )
+  );
+
+drop policy if exists "Parties can update a contract" on public.contracts;
+create policy "Parties can update a contract"
+  on public.contracts for update
+  using (auth.uid() = employer_id or auth.uid() = student_id)
+  with check (
+    (auth.uid() = employer_id or auth.uid() = student_id)
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
+    )
+  );
+
+drop policy if exists "Students can review completed employers" on public.reviews;
+create policy "Students can review completed employers"
+  on public.reviews for insert
+  with check (
+    reviewer_id = auth.uid()
+    and exists (
+      select 1 from public.contracts c
+      where c.id = contract_id
+        and c.student_id = auth.uid()
+        and c.employer_id = reviews.employer_id
+        and c.status = 'Completed'
+    )
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
+    )
+  );
+
+drop policy if exists "Students can save jobs" on public.saved_jobs;
+create policy "Students can save jobs"
+  on public.saved_jobs for insert with check (
+    student_id = auth.uid()
+    and exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.role = 'student' and p.flagged_at is null
+    )
+  );
+
+drop policy if exists "Users can file reports" on public.reports;
+create policy "Users can file reports"
+  on public.reports for insert with check (
+    reporter_id = auth.uid()
+    and not (target_type = 'profile' and target_id = auth.uid())
+    and not exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
+    )
+  );
+
+-- 4. Appeals table + RLS.
+create table if not exists public.flag_appeals (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references public.profiles (id) on delete cascade,
+  message     text not null,
+  status      text not null default 'open'
+              check (status in ('open','approved','denied')),
+  reviewed_by uuid references public.profiles (id) on delete set null,
+  reviewed_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index if not exists flag_appeals_status_created_idx
+  on public.flag_appeals (status, created_at desc);
+create unique index if not exists flag_appeals_one_open
+  on public.flag_appeals (user_id) where status = 'open';
+
+alter table public.flag_appeals enable row level security;
+
+drop policy if exists "Users can view their appeals" on public.flag_appeals;
+create policy "Users can view their appeals"
+  on public.flag_appeals for select using (auth.uid() = user_id);
+
+drop policy if exists "Flagged users can file appeals" on public.flag_appeals;
+create policy "Flagged users can file appeals"
+  on public.flag_appeals for insert with check (
+    user_id = auth.uid()
+    and exists (
+      select 1 from public.profiles p
+      where p.id = auth.uid() and p.flagged_at is not null
+    )
+  );
+
+-- 5. Notify every admin on a new appeal.
+create or replace function public.notify_on_appeal()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.notifications (user_id, type, title, body, link)
+  select p.id, 'appeal_created', 'New flag appeal',
+         'A flagged user submitted an appeal.',
+         '/admin/appeals'
+  from public.profiles p
+  where p.role = 'admin';
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_on_appeal_insert on public.flag_appeals;
+create trigger notify_on_appeal_insert
+  after insert on public.flag_appeals
+  for each row execute function public.notify_on_appeal();
 ```
 
 ---

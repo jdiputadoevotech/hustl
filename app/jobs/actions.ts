@@ -81,9 +81,14 @@ export async function createJob(formData: FormData) {
   // Only employers may post. RLS enforces this too; this gives a clear message.
   const { data: me } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, flagged_at")
     .eq("id", user.id)
     .single();
+  if (me?.flagged_at) {
+    redirect(
+      `/appeal?error=${encodeURIComponent("Your account is restricted, so you can't post jobs.")}`,
+    );
+  }
   if (me?.role !== "employer") {
     redirect(
       `/profile/${user.id}?error=${encodeURIComponent("Become an employer to post a job.")}`,

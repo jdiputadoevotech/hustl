@@ -9,6 +9,19 @@ import type { ContractStatus } from "@/lib/types/database";
 const dashErr = (msg: string): never =>
   redirect(`/dashboard?contractError=${encodeURIComponent(msg)}`);
 
+/** Flagged users are write-locked (RLS enforces it too; this is a clear message). */
+async function isFlagged(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("flagged_at")
+    .eq("id", userId)
+    .single();
+  return Boolean(data?.flagged_at);
+}
+
 /**
  * Employer sends a job offer to a student (identified by email). The student
  * must be a registered account. Creates a contract in 'Offered'.
@@ -22,6 +35,9 @@ export async function offerContract(formData: FormData) {
   if (!jobId || !email) return dashErr("Pick a job and enter a student email");
 
   const supabase = await createClient();
+  if (await isFlagged(supabase, user.id)) {
+    return dashErr("Your account is restricted, so you can't send offers.");
+  }
 
   // Job must belong to the current user (also enforced by RLS).
   const { data: job } = await supabase
@@ -77,6 +93,10 @@ async function transition(
   if (!user) redirect("/auth/login");
 
   const supabase = await createClient();
+  if (await isFlagged(supabase, user.id)) {
+    return dashErr("Your account is restricted, so you can't change contracts.");
+  }
+
   const { data: c } = await supabase
     .from("contracts")
     .select("id, employer_id, student_id, status")

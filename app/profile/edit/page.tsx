@@ -11,7 +11,7 @@ import { ConfirmSubmit } from "@/components/marketplace/confirm-submit";
 import { FormError } from "@/components/marketplace/form-error";
 import { FormSection } from "@/components/marketplace/form-section";
 import { Card, CardContent } from "@/components/ui/card";
-import { updateProfile, deleteAccount } from "../actions";
+import { updateProfile, deactivateAccount } from "../actions";
 
 export const metadata = { title: "Edit profile — Hustl" };
 
@@ -253,15 +253,16 @@ export default async function EditProfilePage({
               Danger zone
             </h2>
             <p className="text-xs text-muted-foreground">
-              Deletes your profile, jobs, and contracts. Reviews you wrote stay
-              up as &ldquo;Deleted user.&rdquo; This cannot be undone.
+              Deactivates your account. Your profile and job posts are hidden
+              until you log back in and reactivate. Reviews you wrote stay
+              visible. Nothing is deleted.
             </p>
           </div>
           <ConfirmSubmit
-            action={deleteAccount}
-            label="Delete account"
-            confirmTitle="Delete your account?"
-            confirmBody="This permanently deletes your profile, your job posts, and your contracts. Reviews you've written stay visible but show as from a deleted user. You can't delete while you have active or pending contracts. This cannot be undone."
+            action={deactivateAccount}
+            label="Deactivate account"
+            confirmTitle="Deactivate your account?"
+            confirmBody="This hides your profile and job posts and signs you out. Log back in anytime to reactivate — nothing is deleted. You can't deactivate while you have active or pending contracts."
             size="sm"
           />
         </CardContent>
