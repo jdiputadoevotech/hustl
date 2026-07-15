@@ -130,6 +130,7 @@ export default async function ProfilePage({
           ? ((r.profiles as unknown as { full_name: string | null } | null)
               ?.full_name ?? null)
           : "Deleted user",
+        profile_id: r.reviewer_id, // links to the reviewing student; null once deleted
         job_id: job.id,
         job_title: job.title,
       };
@@ -151,7 +152,7 @@ export default async function ProfilePage({
     const { data: madeRaw } = await supabase
       .from("reviews")
       .select(
-        "id, rating, comment, created_at, profiles:employer_id ( full_name, establishment_name ), contracts:contract_id ( jobs ( id, title ) )",
+        "id, rating, comment, created_at, employer_id, profiles:employer_id ( full_name, establishment_name ), contracts:contract_id ( jobs ( id, title ) )",
       )
       .eq("reviewer_id", id)
       .order("created_at", { ascending: false });
@@ -168,6 +169,7 @@ export default async function ProfilePage({
         created_at: r.created_at,
         // For reviews the student *made*, show the employer they reviewed.
         reviewer_name: emp?.establishment_name || emp?.full_name || null,
+        profile_id: r.employer_id, // links to the reviewed employer
         job_id: job.id,
         job_title: job.title,
       };

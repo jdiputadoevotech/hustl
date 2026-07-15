@@ -5,7 +5,10 @@ import { useMemo, useState } from "react";
 import { Briefcase, Star } from "lucide-react";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { StarRating } from "@/components/marketplace/star-rating";
-import type { ReviewItem } from "@/components/marketplace/review-list";
+import {
+  ReviewerName,
+  type ReviewItem,
+} from "@/components/marketplace/review-list";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -164,9 +167,11 @@ export function ReviewsSection({
                 className="h-10 w-10 text-sm"
               />
               <div className="min-w-0">
-                <p className="truncate font-semibold leading-tight">
-                  {r.reviewer_name ?? "Carolinian"}
-                </p>
+                <ReviewerName
+                  name={r.reviewer_name}
+                  profileId={r.profile_id}
+                  className="block truncate font-semibold leading-tight"
+                />
                 {r.job_title && (
                   <span className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
                     <Briefcase className="h-3 w-3 shrink-0" aria-hidden />

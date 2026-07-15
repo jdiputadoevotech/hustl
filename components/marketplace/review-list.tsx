@@ -9,6 +9,10 @@ export interface ReviewItem {
   comment: string | null;
   created_at: string;
   reviewer_name: string | null;
+  // Profile the displayed name links to: the reviewing student (reviews an
+  // employer received) or the reviewed employer (reviews a student made).
+  // Null when that account was deleted → name renders unlinked.
+  profile_id: string | null;
   // The job the review came from (via contract). Null once the contract is
   // deleted (contract_id → set null), so the job is no longer derivable.
   job_id: string | null;
@@ -33,6 +37,26 @@ export function reviewJob(contracts: unknown): {
   return { id: job?.id ?? null, title: job?.title ?? null };
 }
 
+/** Reviewer/reviewee name, linked to their profile when it still exists. */
+export function ReviewerName({
+  name,
+  profileId,
+  className,
+}: {
+  name: string | null;
+  profileId: string | null;
+  className?: string;
+}) {
+  const label = name ?? "Carolinian";
+  return profileId ? (
+    <Link href={`/profile/${profileId}`} className={`${className} hover:underline`}>
+      {label}
+    </Link>
+  ) : (
+    <span className={className}>{label}</span>
+  );
+}
+
 export function ReviewList({ reviews }: { reviews: ReviewItem[] }) {
   if (reviews.length === 0) {
     return (
@@ -48,9 +72,11 @@ export function ReviewList({ reviews }: { reviews: ReviewItem[] }) {
         <li key={r.id} className="py-4 space-y-2">
           <div className="flex items-center gap-2">
             <AvatarInitials name={r.reviewer_name} className="h-7 w-7 text-xs" />
-            <span className="font-medium text-sm">
-              {r.reviewer_name ?? "Carolinian"}
-            </span>
+            <ReviewerName
+              name={r.reviewer_name}
+              profileId={r.profile_id}
+              className="font-medium text-sm"
+            />
             <span className="text-xs text-muted-foreground ml-auto">
               {new Date(r.created_at).toLocaleDateString()}
             </span>

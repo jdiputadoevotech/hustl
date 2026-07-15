@@ -86,6 +86,7 @@ export default async function JobDetailPage({
         ? ((r.profiles as unknown as { full_name: string | null } | null)
             ?.full_name ?? null)
         : "Deleted user",
+      profile_id: r.reviewer_id, // links to the reviewing student; null once deleted
       job_id: rJob.id,
       job_title: rJob.title,
     };
