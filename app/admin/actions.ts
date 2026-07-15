@@ -173,3 +173,61 @@ export async function dismissReport(id: string) {
 export async function reopenReport(id: string) {
   await setReportStatus(id, "open");
 }
+
+// ---------- Reviews ----------
+// Soft delete (archive) is the default, reversible action: an archived review is
+// hidden on every public surface and dropped from the employer's rating (the
+// jobs_with_employer view + app queries filter archived=false). Hard delete is
+// permanent. Both bypass RLS via the service-role client.
+
+export async function setReviewArchived(id: string, archived: boolean) {
+  const user = await requireAdmin();
+  const admin = createAdminClient();
+
+  // Need the employer to revalidate their public profile's rating/reviews.
+  const { data: review } = await admin
+    .from("reviews")
+    .select("employer_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  const { error } = await admin
+    .from("reviews")
+    .update({ archived, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) fail("/admin/reviews", error.message);
+
+  // Archiving a review closes out any open reports against it.
+  if (archived) {
+    await admin
+      .from("reports")
+      .update({
+        status: "resolved",
+        resolved_by: user.id,
+        resolved_at: new Date().toISOString(),
+      })
+      .eq("target_type", "review")
+      .eq("target_id", id)
+      .eq("status", "open");
+  }
+
+  revalidatePath("/admin/reviews");
+  revalidatePath("/admin/reports");
+  if (review?.employer_id) revalidatePath(`/profile/${review.employer_id}`);
+  redirect(`/admin/reviews?tab=${archived ? "archived" : "visible"}`);
+}
+
+export async function deleteReviewAdmin(id: string) {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { data: review } = await admin
+    .from("reviews")
+    .select("employer_id")
+    .eq("id", id)
+    .maybeSingle();
+  const { error } = await admin.from("reviews").delete().eq("id", id);
+  if (error) fail("/admin/reviews", error.message);
+  revalidatePath("/admin/reviews");
+  if (review?.employer_id) revalidatePath(`/profile/${review.employer_id}`);
+  redirect("/admin/reviews");
+}

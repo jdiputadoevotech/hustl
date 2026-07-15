@@ -45,7 +45,12 @@ export function ReportDialog({
 }: ReportDialogProps) {
   const [open, setOpen] = useState(false);
   const triggerLabel =
-    label ?? (targetType === "profile" ? "Report user" : "Report job");
+    label ??
+    (targetType === "profile"
+      ? "Report user"
+      : targetType === "job"
+        ? "Report job"
+        : "Report review");
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

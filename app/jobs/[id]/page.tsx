@@ -73,6 +73,7 @@ export default async function JobDetailPage({
       "id, rating, comment, created_at, reviewer_id, profiles:reviewer_id ( full_name ), contracts:contract_id ( jobs ( id, title ) )",
     )
     .eq("employer_id", job.employer_id)
+    .eq("archived", false) // hide admin-archived reviews from the public
     .order("created_at", { ascending: false });
   const reviews: ReviewItem[] = (reviewsRaw ?? []).map((r) => {
     const rJob = reviewJob(r.contracts);
@@ -87,6 +88,7 @@ export default async function JobDetailPage({
             ?.full_name ?? null)
         : "Deleted user",
       profile_id: r.reviewer_id, // links to the reviewing student; null once deleted
+      author_id: r.reviewer_id, // review author (the student), for report gating
       job_id: rJob.id,
       job_title: rJob.title,
     };
@@ -265,7 +267,13 @@ export default async function JobDetailPage({
 
           <FaqAccordion faqs={faqs} />
 
-          <ReviewsSection reviews={reviews} avg={rAvg} count={rCount} />
+          <ReviewsSection
+            reviews={reviews}
+            avg={rAvg}
+            count={rCount}
+            viewerId={user?.id}
+            reportRedirect={`/jobs/${job.id}`}
+          />
 
           {reviewableContractId && (
             <ReviewForm

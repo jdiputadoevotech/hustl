@@ -117,6 +117,7 @@ export default async function ProfilePage({
         "id, rating, comment, created_at, reviewer_id, profiles:reviewer_id ( full_name ), contracts:contract_id ( jobs ( id, title ) )",
       )
       .eq("employer_id", id)
+      .eq("archived", false) // hide admin-archived reviews from the public
       .order("created_at", { ascending: false });
     receivedReviews = (reviewsRaw ?? []).map((r) => {
       const job = reviewJob(r.contracts);
@@ -131,6 +132,7 @@ export default async function ProfilePage({
               ?.full_name ?? null)
           : "Deleted user",
         profile_id: r.reviewer_id, // links to the reviewing student; null once deleted
+        author_id: r.reviewer_id, // review author (the student), for report gating
         job_id: job.id,
         job_title: job.title,
       };
@@ -155,6 +157,7 @@ export default async function ProfilePage({
         "id, rating, comment, created_at, employer_id, profiles:employer_id ( full_name, establishment_name ), contracts:contract_id ( jobs ( id, title ) )",
       )
       .eq("reviewer_id", id)
+      .eq("archived", false) // hide admin-archived reviews from the public
       .order("created_at", { ascending: false });
     madeReviews = (madeRaw ?? []).map((r) => {
       const emp = r.profiles as unknown as {
@@ -170,6 +173,7 @@ export default async function ProfilePage({
         // For reviews the student *made*, show the employer they reviewed.
         reviewer_name: emp?.establishment_name || emp?.full_name || null,
         profile_id: r.employer_id, // links to the reviewed employer
+        author_id: id, // review author = this student profile, for report gating
         job_id: job.id,
         job_title: job.title,
       };
@@ -318,6 +322,8 @@ export default async function ProfilePage({
                   reviews={receivedReviews}
                   avg={rAvg}
                   count={rCount}
+                  viewerId={user?.id}
+                  reportRedirect={`/profile/${id}`}
                 />
               </div>
             </>
@@ -431,7 +437,11 @@ export default async function ProfilePage({
                     </span>
                   )}
                 </h2>
-                <ReviewList reviews={madeReviews} />
+                <ReviewList
+                  reviews={madeReviews}
+                  viewerId={user?.id}
+                  reportRedirect={`/profile/${id}`}
+                />
               </section>
             </>
           )}

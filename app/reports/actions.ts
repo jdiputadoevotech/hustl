@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import type { ReportReason, ReportTargetType } from "@/lib/types/database";
 
-const TARGET_TYPES: ReportTargetType[] = ["profile", "job"];
+const TARGET_TYPES: ReportTargetType[] = ["profile", "job", "review"];
 const REASONS: ReportReason[] = [
   "spam",
   "harassment",
@@ -44,6 +44,19 @@ export async function createReport(formData: FormData) {
   }
 
   const supabase = await createClient();
+
+  // A review's author can't report their own review.
+  if (targetType === "review") {
+    const { data: review } = await supabase
+      .from("reviews")
+      .select("reviewer_id")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (review?.reviewer_id === user.id) {
+      back("reportError=" + encodeURIComponent("You can't report your own review."));
+    }
+  }
+
   const { error } = await supabase.from("reports").insert({
     reporter_id: user.id,
     target_type: targetType,

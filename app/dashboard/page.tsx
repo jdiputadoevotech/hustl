@@ -106,7 +106,7 @@ export default async function DashboardPage({
   let myContracts: MyContractRow[] | null = null;
   const reviewByContract = new Map<
     string,
-    { rating: number; comment: string }
+    { rating: number; comment: string; archived: boolean }
   >();
 
   if (isEmployer) {
@@ -123,7 +123,11 @@ export default async function DashboardPage({
       countMine("contracts", "employer_id", { status: "Offered" }),
       countMine("contracts", "employer_id", { status: "Accepted" }),
       countMine("contracts", "employer_id", { status: "Completed" }),
-      supabase.from("reviews").select("rating").eq("employer_id", user.id),
+      supabase
+        .from("reviews")
+        .select("rating")
+        .eq("employer_id", user.id)
+        .eq("archived", false), // match the public rating (archived excluded)
       supabase
         .from("jobs")
         .select("id, title, job_type, is_disabled")
@@ -178,7 +182,7 @@ export default async function DashboardPage({
         .order("created_at", { ascending: false }),
       supabase
         .from("reviews")
-        .select("contract_id, rating, comment")
+        .select("contract_id, rating, comment, archived")
         .eq("reviewer_id", user.id),
     ]);
 
@@ -193,6 +197,7 @@ export default async function DashboardPage({
       reviewByContract.set(r.contract_id, {
         rating: r.rating,
         comment: r.comment,
+        archived: r.archived,
       });
   }
 
@@ -385,12 +390,17 @@ export default async function DashboardPage({
                         />
                       )}
 
-                      {status === "Completed" && (
-                        <ReviewForm
-                          contractId={c.id}
-                          existing={reviewByContract.get(c.id) ?? null}
-                        />
-                      )}
+                      {status === "Completed" &&
+                        (reviewByContract.get(c.id)?.archived ? (
+                          <p className="text-xs text-muted-foreground">
+                            Your review was removed by a moderator.
+                          </p>
+                        ) : (
+                          <ReviewForm
+                            contractId={c.id}
+                            existing={reviewByContract.get(c.id) ?? null}
+                          />
+                        ))}
                     </li>
                   );
                 })}

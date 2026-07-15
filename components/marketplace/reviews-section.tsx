@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Briefcase, Star } from "lucide-react";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { StarRating } from "@/components/marketplace/star-rating";
+import { ReportDialog } from "@/components/marketplace/report-dialog";
 import {
   ReviewerName,
   type ReviewItem,
@@ -26,10 +27,14 @@ export function ReviewsSection({
   reviews,
   avg,
   count,
+  viewerId,
+  reportRedirect,
 }: {
   reviews: ReviewItem[];
   avg: number;
   count: number;
+  viewerId?: string | null;
+  reportRedirect?: string;
 }) {
   const [sort, setSort] = useState<SortKey>("recent");
   const [expanded, setExpanded] = useState(false);
@@ -209,6 +214,18 @@ export function ReviewsSection({
               <span className="text-muted-foreground">
                 {timeAgo(r.created_at)}
               </span>
+              {reportRedirect &&
+                viewerId &&
+                r.author_id &&
+                viewerId !== r.author_id && (
+                  <span className="ml-auto">
+                    <ReportDialog
+                      targetType="review"
+                      targetId={r.id}
+                      redirectTo={reportRedirect}
+                    />
+                  </span>
+                )}
             </div>
 
             {r.comment && (

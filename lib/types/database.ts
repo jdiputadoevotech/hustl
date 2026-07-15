@@ -136,6 +136,7 @@ export interface Review {
   reviewer_id: string | null; // uuid, FK -> profiles.id (the student); null once they delete their account
   rating: number; // 1..5
   comment: string | null;
+  archived: boolean; // admin soft-delete: hidden everywhere public + excluded from ratings
   created_at: string; // timestamptz
   updated_at: string; // timestamptz
 }
@@ -164,8 +165,8 @@ export interface Notification {
   created_at: string; // timestamptz
 }
 
-/** What a report points at. Both live in one table via a polymorphic target_id. */
-export type ReportTargetType = "profile" | "job";
+/** What a report points at. All live in one table via a polymorphic target_id. */
+export type ReportTargetType = "profile" | "job" | "review";
 
 /** Why the reporter flagged the target. Drives the admin triage dropdown. */
 export type ReportReason =

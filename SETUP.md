@@ -193,6 +193,7 @@ create table public.reviews (
   reviewer_id uuid references public.profiles (id) on delete set null, -- the student; null once they delete their account
   rating      int  not null check (rating between 1 and 5),
   comment     text,
+  archived    boolean not null default false,  -- admin soft-delete: hidden everywhere public + excluded from ratings
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   unique (contract_id)          -- one review per completed contract (nulls are distinct)
@@ -241,8 +242,8 @@ create index notifications_user_unread_idx
 create table public.reports (
   id          uuid primary key default gen_random_uuid(),
   reporter_id uuid not null references public.profiles (id) on delete cascade,
-  target_type text not null check (target_type in ('profile','job')),
-  target_id   uuid not null,                 -- profiles.id or jobs.id (polymorphic; no FK)
+  target_type text not null check (target_type in ('profile','job','review')),
+  target_id   uuid not null,                 -- profiles.id, jobs.id, or reviews.id (polymorphic; no FK)
   reason      text not null
               check (reason in ('spam','harassment','scam','inappropriate','other')),
   details     text,
@@ -391,14 +392,18 @@ create policy "Students can review completed employers"
     )
   );
 
+-- archived = false in both clauses: once an admin archives a review, its author
+-- can no longer edit, un-archive, or delete it (moderation is final until an
+-- admin restores it). Admins act via the service-role client, which bypasses RLS.
 drop policy if exists "Reviewers can update their own review" on public.reviews;
 create policy "Reviewers can update their own review"
   on public.reviews for update
-  using (reviewer_id = auth.uid()) with check (reviewer_id = auth.uid());
+  using (reviewer_id = auth.uid() and archived = false)
+  with check (reviewer_id = auth.uid() and archived = false);
 
 drop policy if exists "Reviewers can delete their own review" on public.reviews;
 create policy "Reviewers can delete their own review"
-  on public.reviews for delete using (reviewer_id = auth.uid());
+  on public.reviews for delete using (reviewer_id = auth.uid() and archived = false);
 
 -- ---------- SAVED_JOBS ----------
 -- Private to the owner: a student only ever sees/manages their own bookmarks.
@@ -679,7 +684,7 @@ select
   count(r.id) as employer_rating_count
 from public.jobs j
 left join public.profiles p on p.id = j.employer_id
-left join public.reviews  r on r.employer_id = j.employer_id
+left join public.reviews  r on r.employer_id = j.employer_id and r.archived = false
 group by j.id, p.full_name, p.establishment_name, p.verification_status;
 ```
 

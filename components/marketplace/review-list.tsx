@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Briefcase } from "lucide-react";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { StarRating } from "@/components/marketplace/star-rating";
+import { ReportDialog } from "@/components/marketplace/report-dialog";
 
 export interface ReviewItem {
   id: string;
@@ -13,10 +14,20 @@ export interface ReviewItem {
   // employer received) or the reviewed employer (reviews a student made).
   // Null when that account was deleted → name renders unlinked.
   profile_id: string | null;
+  // The reviewing student (review author). Independent of profile_id, which
+  // flips to the employer on "reviews made" surfaces. Used to gate the Report
+  // button (an author can't report their own review). Null once the student
+  // deletes their account.
+  author_id: string | null;
   // The job the review came from (via contract). Null once the contract is
   // deleted (contract_id → set null), so the job is no longer derivable.
   job_id: string | null;
   job_title: string | null;
+}
+
+/** Whether the viewer may report this review: signed in, not the author. */
+function canReport(viewerId: string | null | undefined, r: ReviewItem) {
+  return !!viewerId && !!r.author_id && viewerId !== r.author_id;
 }
 
 /** Pull the job (id, title) out of a review's nested contract embed.
@@ -57,7 +68,15 @@ export function ReviewerName({
   );
 }
 
-export function ReviewList({ reviews }: { reviews: ReviewItem[] }) {
+export function ReviewList({
+  reviews,
+  viewerId,
+  reportRedirect,
+}: {
+  reviews: ReviewItem[];
+  viewerId?: string | null;
+  reportRedirect?: string;
+}) {
   if (reviews.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -80,6 +99,13 @@ export function ReviewList({ reviews }: { reviews: ReviewItem[] }) {
             <span className="text-xs text-muted-foreground ml-auto">
               {new Date(r.created_at).toLocaleDateString()}
             </span>
+            {reportRedirect && canReport(viewerId, r) && (
+              <ReportDialog
+                targetType="review"
+                targetId={r.id}
+                redirectTo={reportRedirect}
+              />
+            )}
           </div>
           {r.job_title && (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

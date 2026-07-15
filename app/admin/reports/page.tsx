@@ -63,24 +63,37 @@ export default async function AdminReportsPage({
   const rows = all.filter((r) => r.status === status);
 
   // Batch-hydrate labels: reporter names + profile targets in one profiles read,
-  // job targets in one jobs read.
+  // job targets in one jobs read, review targets in one reviews read.
   const profileIds = new Set<string>();
   const jobIds = new Set<string>();
+  const reviewIds = new Set<string>();
   for (const r of rows) {
     profileIds.add(r.reporter_id);
     if (r.target_type === "profile") profileIds.add(r.target_id);
-    else jobIds.add(r.target_id);
+    else if (r.target_type === "job") jobIds.add(r.target_id);
+    else reviewIds.add(r.target_id);
   }
-  const [{ data: profs }, { data: jobs }] = await Promise.all([
+  const [{ data: profs }, { data: jobs }, { data: reviews }] = await Promise.all([
     profileIds.size
       ? admin.from("profiles").select("id, full_name").in("id", [...profileIds])
       : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
     jobIds.size
       ? admin.from("jobs").select("id, title").in("id", [...jobIds])
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+    reviewIds.size
+      ? admin.from("reviews").select("id, comment").in("id", [...reviewIds])
+      : Promise.resolve({ data: [] as { id: string; comment: string | null }[] }),
   ]);
   const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name ?? "Carolinian"]));
   const jobTitleById = new Map((jobs ?? []).map((j) => [j.id, j.title]));
+  // Review target label: a short comment excerpt, else a generic stand-in.
+  const reviewLabelById = new Map(
+    (reviews ?? []).map((r) => {
+      const c = r.comment?.trim();
+      const excerpt = c ? (c.length > 60 ? `${c.slice(0, 60)}…` : c) : null;
+      return [r.id, excerpt ? `“${excerpt}”` : "a review"];
+    }),
+  );
 
   return (
     <div className="space-y-6">
@@ -110,11 +123,15 @@ export default async function AdminReportsPage({
             const targetHref =
               r.target_type === "profile"
                 ? `/profile/${r.target_id}`
-                : `/jobs/${r.target_id}`;
+                : r.target_type === "job"
+                  ? `/jobs/${r.target_id}`
+                  : `/admin/reviews?focus=${r.target_id}`; // no public review page
             const targetLabel =
               r.target_type === "profile"
                 ? (nameById.get(r.target_id) ?? "a user")
-                : (jobTitleById.get(r.target_id) ?? "a job");
+                : r.target_type === "job"
+                  ? (jobTitleById.get(r.target_id) ?? "a job")
+                  : (reviewLabelById.get(r.target_id) ?? "a review");
             return (
               <li
                 key={r.id}
