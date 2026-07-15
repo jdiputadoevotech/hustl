@@ -18,7 +18,10 @@ import { ReviewsSection } from "@/components/marketplace/reviews-section";
 import { ReviewForm } from "@/components/marketplace/review-form";
 import { FaqAccordion } from "@/components/marketplace/faq-accordion";
 import { QuickFaq } from "@/components/marketplace/quick-faq";
-import type { ReviewItem } from "@/components/marketplace/review-list";
+import {
+  reviewJob,
+  type ReviewItem,
+} from "@/components/marketplace/review-list";
 import { formatPay, payPeriodLabel } from "@/lib/pay";
 import { timeAgo } from "@/lib/time";
 import { deleteJob, toggleJobVisibility } from "../actions";
@@ -67,21 +70,26 @@ export default async function JobDetailPage({
   const { data: reviewsRaw } = await supabase
     .from("reviews")
     .select(
-      "id, rating, comment, created_at, reviewer_id, profiles:reviewer_id ( full_name )",
+      "id, rating, comment, created_at, reviewer_id, profiles:reviewer_id ( full_name ), contracts:contract_id ( jobs ( id, title ) )",
     )
     .eq("employer_id", job.employer_id)
     .order("created_at", { ascending: false });
-  const reviews: ReviewItem[] = (reviewsRaw ?? []).map((r) => ({
-    id: r.id,
-    rating: r.rating,
-    comment: r.comment,
-    created_at: r.created_at,
-    // reviewer_id is null once the reviewing student deletes their account.
-    reviewer_name: r.reviewer_id
-      ? ((r.profiles as unknown as { full_name: string | null } | null)
-          ?.full_name ?? null)
-      : "Deleted user",
-  }));
+  const reviews: ReviewItem[] = (reviewsRaw ?? []).map((r) => {
+    const rJob = reviewJob(r.contracts);
+    return {
+      id: r.id,
+      rating: r.rating,
+      comment: r.comment,
+      created_at: r.created_at,
+      // reviewer_id is null once the reviewing student deletes their account.
+      reviewer_name: r.reviewer_id
+        ? ((r.profiles as unknown as { full_name: string | null } | null)
+            ?.full_name ?? null)
+        : "Deleted user",
+      job_id: rJob.id,
+      job_title: rJob.title,
+    };
+  });
   const rCount = reviews.length;
   const rAvg =
     rCount > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / rCount : 0;

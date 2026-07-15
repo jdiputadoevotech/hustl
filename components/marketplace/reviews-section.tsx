@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Globe, Star } from "lucide-react";
+import { Briefcase, Star } from "lucide-react";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { StarRating } from "@/components/marketplace/star-rating";
 import type { ReviewItem } from "@/components/marketplace/review-list";
@@ -166,10 +167,24 @@ export function ReviewsSection({
                 <p className="truncate font-semibold leading-tight">
                   {r.reviewer_name ?? "Carolinian"}
                 </p>
-                <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                  <Globe className="h-3 w-3" aria-hidden />
-                  Unknown
-                </span>
+                {r.job_title && (
+                  <span className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+                    <Briefcase className="h-3 w-3 shrink-0" aria-hidden />
+                    for{" "}
+                    {r.job_id ? (
+                      <Link
+                        href={`/jobs/${r.job_id}`}
+                        className="truncate font-medium text-foreground hover:underline"
+                      >
+                        {r.job_title}
+                      </Link>
+                    ) : (
+                      <span className="truncate font-medium text-foreground">
+                        {r.job_title}
+                      </span>
+                    )}
+                  </span>
+                )}
               </div>
             </div>
 

@@ -23,6 +23,7 @@ import { JobCard } from "@/components/marketplace/job-card";
 import { StarRating } from "@/components/marketplace/star-rating";
 import {
   ReviewList,
+  reviewJob,
   type ReviewItem,
 } from "@/components/marketplace/review-list";
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
@@ -113,21 +114,26 @@ export default async function ProfilePage({
     const { data: reviewsRaw } = await supabase
       .from("reviews")
       .select(
-        "id, rating, comment, created_at, reviewer_id, profiles:reviewer_id ( full_name )",
+        "id, rating, comment, created_at, reviewer_id, profiles:reviewer_id ( full_name ), contracts:contract_id ( jobs ( id, title ) )",
       )
       .eq("employer_id", id)
       .order("created_at", { ascending: false });
-    receivedReviews = (reviewsRaw ?? []).map((r) => ({
-      id: r.id,
-      rating: r.rating,
-      comment: r.comment,
-      created_at: r.created_at,
-      // reviewer_id is null once the reviewing student deletes their account.
-      reviewer_name: r.reviewer_id
-        ? ((r.profiles as unknown as { full_name: string | null } | null)
-            ?.full_name ?? null)
-        : "Deleted user",
-    }));
+    receivedReviews = (reviewsRaw ?? []).map((r) => {
+      const job = reviewJob(r.contracts);
+      return {
+        id: r.id,
+        rating: r.rating,
+        comment: r.comment,
+        created_at: r.created_at,
+        // reviewer_id is null once the reviewing student deletes their account.
+        reviewer_name: r.reviewer_id
+          ? ((r.profiles as unknown as { full_name: string | null } | null)
+              ?.full_name ?? null)
+          : "Deleted user",
+        job_id: job.id,
+        job_title: job.title,
+      };
+    });
   } else if (!isAdmin) {
     // Contracts are RLS-gated: parties always see them; others only when the
     // student hasn't hidden them. When hidden, show a placeholder to visitors.
@@ -145,7 +151,7 @@ export default async function ProfilePage({
     const { data: madeRaw } = await supabase
       .from("reviews")
       .select(
-        "id, rating, comment, created_at, profiles:employer_id ( full_name, establishment_name )",
+        "id, rating, comment, created_at, profiles:employer_id ( full_name, establishment_name ), contracts:contract_id ( jobs ( id, title ) )",
       )
       .eq("reviewer_id", id)
       .order("created_at", { ascending: false });
@@ -154,6 +160,7 @@ export default async function ProfilePage({
         full_name: string | null;
         establishment_name: string | null;
       } | null;
+      const job = reviewJob(r.contracts);
       return {
         id: r.id,
         rating: r.rating,
@@ -161,6 +168,8 @@ export default async function ProfilePage({
         created_at: r.created_at,
         // For reviews the student *made*, show the employer they reviewed.
         reviewer_name: emp?.establishment_name || emp?.full_name || null,
+        job_id: job.id,
+        job_title: job.title,
       };
     });
   }
