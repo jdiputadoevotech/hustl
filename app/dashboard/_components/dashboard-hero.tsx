@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { StarRating } from "@/components/marketplace/star-rating";
+import { fetchReviewStats } from "@/lib/reviews";
 
 type Stat = { label: string; value: number; icon: LucideIcon; href: string };
 
@@ -63,26 +64,16 @@ export async function DashboardHero({
       { count: pendingOffers },
       { count: activeHires },
       { count: completedHires },
-      { data: reviewRows },
+      stars,
     ] = await Promise.all([
       countMine("jobs", "employer_id", { is_disabled: false }),
       countMine("contracts", "employer_id", { status: "Offered" }),
       countMine("contracts", "employer_id", { status: "Accepted" }),
       countMine("contracts", "employer_id", { status: "Completed" }),
-      supabase
-        .from("reviews")
-        .select("rating")
-        .eq("employer_id", userId)
-        .eq("archived", false), // match the public rating (archived excluded)
+      fetchReviewStats(supabase, userId),
     ]);
 
-    const ratings = (reviewRows ?? []).map((r) => r.rating);
-    rating = {
-      count: ratings.length,
-      average: ratings.length
-        ? ratings.reduce((a, b) => a + b, 0) / ratings.length
-        : 0,
-    };
+    rating = { count: stars.count, average: stars.avg };
 
     stats = [
       {

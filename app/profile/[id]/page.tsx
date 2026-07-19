@@ -29,7 +29,19 @@ import {
 import { ReviewsSection } from "@/components/marketplace/reviews-section";
 import { ReportDialog } from "@/components/marketplace/report-dialog";
 import { FormError } from "@/components/marketplace/form-error";
+import { Pagination } from "@/components/shared/pagination";
 import { monthYear } from "@/lib/time";
+import { JOB_CARD_SELECT } from "@/lib/jobs";
+import { GRID_PAGE_SIZE, PAGE_SIZE, pageRange } from "@/lib/paging";
+import {
+  REVIEW_SELECT,
+  applyReviewSort,
+  asReviewSort,
+  fetchReviewStats,
+  toReceivedReviewItems,
+  EMPTY_REVIEW_STATS,
+  type ReviewStats,
+} from "@/lib/reviews";
 import type {
   ContractStatus,
   Role,
@@ -42,6 +54,10 @@ type SearchParams = Promise<{
   error?: string;
   reportOk?: string;
   reportError?: string;
+  // Two independent lists share this URL, so each pager gets its own param.
+  jobsPage?: string;
+  reviewsPage?: string;
+  rsort?: string;
 }>;
 
 /** Which socials render, in order, with their icon. */
@@ -70,7 +86,11 @@ export default async function ProfilePage({
   searchParams: SearchParams;
 }) {
   const { id } = await params;
-  const { error, reportOk, reportError } = await searchParams;
+  const { error, reportOk, reportError, jobsPage, reviewsPage, rsort } =
+    await searchParams;
+  const reviewSort = asReviewSort(rsort);
+  const jobPaging = pageRange(jobsPage, GRID_PAGE_SIZE);
+  const reviewPaging = pageRange(reviewsPage, PAGE_SIZE);
   const supabase = await createClient();
 
   const { data: profile, error: profileError } = await supabase
@@ -96,47 +116,39 @@ export default async function ProfilePage({
   // Employer: posted jobs + reviews received. Student: contracts + reviews made.
   type ProfileJobCard = Parameters<typeof JobCard>[0]["job"];
   let jobs: ProfileJobCard[] = [];
+  let jobsTotal = 0;
   let receivedReviews: ReviewItem[] = [];
+  let reviewStats: ReviewStats = EMPTY_REVIEW_STATS;
   let madeReviews: ReviewItem[] = [];
+  let madeTotal = 0;
   let contracts: ContractRow[] = [];
 
   if (isEmployer) {
-    const { data } = await supabase
-      .from("jobs_with_employer")
-      .select(
-        "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_verification_status, employer_rating_avg, employer_rating_count",
-      )
-      .eq("employer_id", id)
-      .eq("is_disabled", false) // public profile shows only listed jobs
-      .order("created_at", { ascending: false });
-    jobs = (data ?? []) as unknown as ProfileJobCard[];
+    const [{ data, count }, { data: reviewsRaw }, stats] = await Promise.all([
+      supabase
+        .from("jobs_with_employer")
+        .select(JOB_CARD_SELECT, { count: "exact" })
+        .eq("employer_id", id)
+        .eq("is_disabled", false) // public profile shows only listed jobs
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }) // stable tiebreak for paging
+        .range(jobPaging.from, jobPaging.to),
+      applyReviewSort(
+        supabase
+          .from("reviews")
+          .select(REVIEW_SELECT)
+          .eq("employer_id", id)
+          .eq("archived", false), // hide admin-archived reviews from the public
+        reviewSort,
+      ).range(reviewPaging.from, reviewPaging.to),
+      // Aggregate over ALL reviews, not just this page — reads only `rating`.
+      fetchReviewStats(supabase, id),
+    ]);
 
-    const { data: reviewsRaw } = await supabase
-      .from("reviews")
-      .select(
-        "id, rating, comment, created_at, reviewer_id, profiles:reviewer_id ( full_name ), contracts:contract_id ( jobs ( id, title ) )",
-      )
-      .eq("employer_id", id)
-      .eq("archived", false) // hide admin-archived reviews from the public
-      .order("created_at", { ascending: false });
-    receivedReviews = (reviewsRaw ?? []).map((r) => {
-      const job = reviewJob(r.contracts);
-      return {
-        id: r.id,
-        rating: r.rating,
-        comment: r.comment,
-        created_at: r.created_at,
-        // reviewer_id is null once the reviewing student deletes their account.
-        reviewer_name: r.reviewer_id
-          ? ((r.profiles as unknown as { full_name: string | null } | null)
-              ?.full_name ?? null)
-          : "Deleted user",
-        profile_id: r.reviewer_id, // links to the reviewing student; null once deleted
-        author_id: r.reviewer_id, // review author (the student), for report gating
-        job_id: job.id,
-        job_title: job.title,
-      };
-    });
+    jobs = (data ?? []) as unknown as ProfileJobCard[];
+    jobsTotal = count ?? 0;
+    receivedReviews = toReceivedReviewItems(reviewsRaw);
+    reviewStats = stats;
   } else if (!isAdmin) {
     // Contracts are RLS-gated: parties always see them; others only when the
     // student hasn't hidden them. When hidden, show a placeholder to visitors.
@@ -151,14 +163,18 @@ export default async function ProfilePage({
       contracts = (data ?? []) as unknown as ContractRow[];
     }
 
-    const { data: madeRaw } = await supabase
+    const { data: madeRaw, count: madeCount } = await supabase
       .from("reviews")
       .select(
         "id, rating, comment, created_at, employer_id, profiles:employer_id ( full_name, establishment_name ), contracts:contract_id ( jobs ( id, title ) )",
+        { count: "exact" },
       )
       .eq("reviewer_id", id)
       .eq("archived", false) // hide admin-archived reviews from the public
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false }) // stable tiebreak for paging
+      .range(reviewPaging.from, reviewPaging.to);
+    madeTotal = madeCount ?? 0;
     madeReviews = (madeRaw ?? []).map((r) => {
       const emp = r.profiles as unknown as {
         full_name: string | null;
@@ -180,11 +196,9 @@ export default async function ProfilePage({
     });
   }
 
-  const rCount = receivedReviews.length;
-  const rAvg =
-    rCount > 0
-      ? receivedReviews.reduce((s, r) => s + r.rating, 0) / rCount
-      : 0;
+  // From the aggregate query, not the page — receivedReviews is one page now.
+  const rCount = reviewStats.count;
+  const rAvg = reviewStats.avg;
 
   const estLabel = isEmployer ? "Company" : "School";
   const estName =
@@ -303,10 +317,25 @@ export default async function ProfilePage({
           {isEmployer ? (
             <>
               <section className="space-y-4">
-                <h2 className="text-2xl font-bold">Posted jobs</h2>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-2xl font-bold">Posted jobs</h2>
+                  {jobsTotal > 0 && (
+                    <span className="rounded-full bg-muted px-2.5 py-0.5 text-sm font-medium tabular-nums text-muted-foreground">
+                      {jobsTotal}
+                    </span>
+                  )}
+                </div>
                 {jobs.length === 0 ? (
+                  // `page > 1` rather than a count check: past the last page
+                  // PostgREST returns no usable total, so count reads as 0.
                   <p className="text-muted-foreground text-sm">
-                    No jobs posted yet.
+                    {jobPaging.page > 1 ? (
+                      <Link href={`/profile/${id}`} className="underline">
+                        That page is empty — back to the first page
+                      </Link>
+                    ) : (
+                      "No jobs posted yet."
+                    )}
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -315,13 +344,22 @@ export default async function ProfilePage({
                     ))}
                   </div>
                 )}
+                <Pagination
+                  page={jobPaging.page}
+                  pageSize={jobPaging.size}
+                  total={jobsTotal}
+                  param="jobsPage"
+                />
               </section>
 
               <div className="max-w-3xl">
                 <ReviewsSection
                   reviews={receivedReviews}
-                  avg={rAvg}
-                  count={rCount}
+                  stats={reviewStats}
+                  page={reviewPaging.page}
+                  pageSize={reviewPaging.size}
+                  sort={reviewSort}
+                  pageParam="reviewsPage"
                   viewerId={user?.id}
                   reportRedirect={`/profile/${id}`}
                 />
@@ -431,9 +469,9 @@ export default async function ProfilePage({
               <section className="space-y-4 max-w-3xl">
                 <h2 className="text-2xl font-bold">
                   Reviews made to employers
-                  {madeReviews.length > 0 && (
+                  {madeTotal > 0 && (
                     <span className="ml-2 text-sm font-normal text-muted-foreground">
-                      {madeReviews.length}
+                      {madeTotal}
                     </span>
                   )}
                 </h2>
@@ -441,6 +479,12 @@ export default async function ProfilePage({
                   reviews={madeReviews}
                   viewerId={user?.id}
                   reportRedirect={`/profile/${id}`}
+                />
+                <Pagination
+                  page={reviewPaging.page}
+                  pageSize={reviewPaging.size}
+                  total={madeTotal}
+                  param="reviewsPage"
                 />
               </section>
             </>

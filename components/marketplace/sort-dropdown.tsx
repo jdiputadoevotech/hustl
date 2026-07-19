@@ -25,13 +25,21 @@ export interface SortOption {
  * "Sort by: <label>" dropdown (Fiverr-style, text trigger). Defaults to the
  * marketplace options; pass `options` for lists that sort on other fields
  * (the dashboard uses newest/oldest/title).
+ *
+ * `param`/`resetParam` let a second list on the same route sort independently —
+ * reviews use ?rsort= and reset ?reviewsPage= so they don't collide with the
+ * job sort and pager sharing the URL.
  */
 export function SortDropdown({
   selected,
   options = SORT_OPTIONS as readonly SortOption[],
+  param = "sort",
+  resetParam = "page",
 }: {
   selected: string;
   options?: readonly SortOption[];
+  param?: string;
+  resetParam?: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -41,8 +49,8 @@ export function SortDropdown({
 
   const go = (value: string) => {
     const next = new URLSearchParams(params.toString());
-    next.set("sort", value);
-    next.delete("page"); // a new order invalidates the current offset
+    next.set(param, value);
+    next.delete(resetParam); // a new order invalidates the current offset
     router.push(`${pathname}?${next.toString()}`);
   };
 

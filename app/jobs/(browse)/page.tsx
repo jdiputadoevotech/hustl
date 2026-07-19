@@ -11,6 +11,9 @@ import {
 } from "@/components/marketplace/sort-dropdown";
 import { GIG_CATEGORIES } from "@/lib/categories";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/shared/pagination";
+import { JOB_CARD_SELECT } from "@/lib/jobs";
+import { GRID_PAGE_SIZE, pageRange } from "@/lib/paging";
 
 export const metadata = { title: "Browse jobs — Hustl" };
 
@@ -20,6 +23,7 @@ type SearchParams = Promise<{
   type?: string;
   sort?: string;
   max?: string;
+  page?: string;
 }>;
 
 export default async function JobsPage({
@@ -27,7 +31,8 @@ export default async function JobsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { q, category, type, sort, max } = await searchParams;
+  const { q, category, type, sort, max, page: pageParam } = await searchParams;
+  const { page, from, to, size } = pageRange(pageParam, GRID_PAGE_SIZE);
   const activeSort: SortValue = sort === "pay" ? "pay" : "newest";
   const selectedCategory = category
     ? GIG_CATEGORIES.find((c) => c.name === category)
@@ -36,9 +41,8 @@ export default async function JobsPage({
 
   let query = supabase
     .from("jobs_with_employer")
-    .select(
-      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_verification_status, employer_rating_avg, employer_rating_count",
-    );
+    .select(JOB_CARD_SELECT, { count: "exact" })
+    .range(from, to);
 
   query = query.eq("is_disabled", false); // hide drafts / incomplete jobs
 
@@ -52,8 +56,12 @@ export default async function JobsPage({
     activeSort === "pay"
       ? query.order("pay_max", { ascending: false, nullsFirst: false })
       : query.order("created_at", { ascending: false });
+  // Stable tiebreak: neither pay_max nor created_at is unique, and without a
+  // total order LIMIT/OFFSET can repeat a row on one page and skip another.
+  query = query.order("id", { ascending: false });
 
-  const { data: jobs } = await query;
+  const { data: jobs, count: total } = await query;
+  const rows = jobs ?? [];
   const user = await getCurrentUser();
   let isEmployer = false;
   let isStudent = false;
@@ -68,15 +76,20 @@ export default async function JobsPage({
     isEmployer = me?.role === "employer";
     isStudent = me?.role === "student";
     isAdmin = me?.role === "admin";
-    if (isStudent) {
+    // Only the jobs on this page need a heart state, so scope the lookup to them.
+    if (isStudent && rows.length) {
       const { data: saved } = await supabase
         .from("saved_jobs")
         .select("job_id")
-        .eq("student_id", user.id);
+        .eq("student_id", user.id)
+        .in(
+          "job_id",
+          rows.map((j) => j.id),
+        );
       saved?.forEach((s) => savedIds.add(s.job_id));
     }
   }
-  const count = jobs?.length ?? 0;
+  const count = total ?? 0;
 
   return (
     <div className="flex flex-col gap-6 py-2">
@@ -127,13 +140,25 @@ export default async function JobsPage({
         </div>
       </div>
 
-      {count === 0 ? (
+      {rows.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center">
-          No jobs found. {isEmployer && "Be the first to post one!"}
+          {/* Keyed off `page`, not `count`: when ?page= is entirely past the
+              end, PostgREST returns no usable total and count collapses to 0. */}
+          {page > 1 ? (
+            <>
+              That page is empty.{" "}
+              <Link href="/jobs" className="underline">
+                Back to the first page
+              </Link>
+              .
+            </>
+          ) : (
+            <>No jobs found. {isEmployer && "Be the first to post one!"}</>
+          )}
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {jobs!.map((j) => (
+          {rows.map((j) => (
             <JobCard
               key={j.id}
               canSave={isStudent}
@@ -162,6 +187,8 @@ export default async function JobsPage({
           ))}
         </div>
       )}
+
+      <Pagination page={page} pageSize={size} total={count} />
     </div>
   );
 }

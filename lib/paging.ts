@@ -1,4 +1,8 @@
+/** Dense row lists (dashboard, admin) and review lists. */
 export const PAGE_SIZE = 10;
+
+/** Card grids — 24 fills six clean rows at the xl 4-column breakpoint. */
+export const GRID_PAGE_SIZE = 24;
 
 /**
  * Turn a `?page=` search param into a Supabase `.range(from, to)` pair.

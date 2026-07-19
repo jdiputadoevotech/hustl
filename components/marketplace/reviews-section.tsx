@@ -1,65 +1,50 @@
-"use client";
-
 import Link from "next/link";
-import { useMemo, useState } from "react";
 import { Briefcase, Star } from "lucide-react";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import { StarRating } from "@/components/marketplace/star-rating";
 import { ReportDialog } from "@/components/marketplace/report-dialog";
+import { SortDropdown } from "@/components/marketplace/sort-dropdown";
 import {
   ReviewerName,
   type ReviewItem,
 } from "@/components/marketplace/review-list";
+import { Pagination } from "@/components/shared/pagination";
+import { REVIEW_SORTS, type ReviewSort, type ReviewStats } from "@/lib/reviews";
 import { timeAgo } from "@/lib/time";
-import { cn } from "@/lib/utils";
 
-type SortKey = "recent" | "highest" | "lowest";
-
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: "recent", label: "Most recent" },
-  { key: "highest", label: "Highest rated" },
-  { key: "lowest", label: "Lowest rated" },
-];
-
-const INITIAL_VISIBLE = 5;
-
+/**
+ * Employer reviews: aggregate summary + one page of reviews.
+ *
+ * `reviews` is a single page; `stats` covers the whole set. Keeping them
+ * separate is what lets the average and the distribution stay globally correct
+ * while the list is paged — `stats` comes from `fetchReviewStats`, which reads
+ * only the `rating` column. Nothing here derives a total from `reviews.length`.
+ *
+ * Sorting is a URL param handled by the server query, not local state, so
+ * "Highest rated" means highest overall rather than highest on this page.
+ */
 export function ReviewsSection({
   reviews,
-  avg,
-  count,
+  stats,
+  page,
+  pageSize,
+  sort,
   viewerId,
   reportRedirect,
+  pageParam = "page",
+  sortParam = "rsort",
 }: {
   reviews: ReviewItem[];
-  avg: number;
-  count: number;
+  stats: ReviewStats;
+  page: number;
+  pageSize: number;
+  sort: ReviewSort;
   viewerId?: string | null;
   reportRedirect?: string;
+  pageParam?: string;
+  sortParam?: string;
 }) {
-  const [sort, setSort] = useState<SortKey>("recent");
-  const [expanded, setExpanded] = useState(false);
-
-  const sorted = useMemo(() => {
-    const copy = [...reviews];
-    switch (sort) {
-      case "highest":
-        return copy.sort(
-          (a, b) =>
-            b.rating - a.rating ||
-            +new Date(b.created_at) - +new Date(a.created_at),
-        );
-      case "lowest":
-        return copy.sort(
-          (a, b) =>
-            a.rating - b.rating ||
-            +new Date(b.created_at) - +new Date(a.created_at),
-        );
-      default:
-        return copy.sort(
-          (a, b) => +new Date(b.created_at) - +new Date(a.created_at),
-        );
-    }
-  }, [reviews, sort]);
+  const { avg, count, buckets } = stats;
 
   if (count === 0) {
     return (
@@ -79,16 +64,9 @@ export function ReviewsSection({
     );
   }
 
-  // Distribution: 5 → 1, fill width relative to the largest bucket so a
-  // dominant rating reads as full while smaller buckets stay legible.
-  const buckets = [5, 4, 3, 2, 1].map((stars) => ({
-    stars,
-    n: reviews.filter((r) => r.rating === stars).length,
-  }));
+  // Bars fill relative to the largest bucket so a dominant rating reads as full
+  // while smaller buckets stay legible. Sourced from stats, not the page.
   const maxN = Math.max(...buckets.map((b) => b.n), 1);
-
-  const visible = expanded ? sorted : sorted.slice(0, INITIAL_VISIBLE);
-  const hasMore = sorted.length > INITIAL_VISIBLE;
 
   return (
     <section aria-labelledby="reviews-heading" className="space-y-8">
@@ -141,31 +119,23 @@ export function ReviewsSection({
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-between border-b pb-3">
+      <div className="flex items-center justify-between gap-4 border-b pb-3">
         <span className="text-sm font-medium">
-          Showing {count} {count === 1 ? "review" : "reviews"}
+          {count} {count === 1 ? "review" : "reviews"}
         </span>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          Sort by
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-            className="h-8 rounded-md border border-input bg-background px-2 pr-7 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            {SORTS.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SortDropdown
+          selected={sort}
+          options={REVIEW_SORTS}
+          param={sortParam}
+          resetParam={pageParam}
+        />
       </div>
 
       {/* List */}
       <ul className="space-y-4">
-        {visible.map((r) => (
+        {reviews.map((r) => (
           <li key={r.id} className="rounded-xl border bg-card p-5">
-            {/* Profile + location */}
+            {/* Profile + job */}
             <div className="flex items-center gap-3">
               <AvatarInitials
                 name={r.reviewer_name}
@@ -237,18 +207,12 @@ export function ReviewsSection({
         ))}
       </ul>
 
-      {hasMore && !expanded && (
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          className={cn(
-            "inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors",
-            "hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-          )}
-        >
-          Show all {count} reviews
-        </button>
-      )}
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={count}
+        param={pageParam}
+      />
     </section>
   );
 }

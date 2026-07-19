@@ -3,6 +3,7 @@ import { getCurrentUser, canBecomeEmployer } from "@/lib/auth";
 import { HomeHero } from "@/components/home/home-hero";
 import { LatestGigs } from "@/components/home/latest-gigs";
 import { HowItWorks } from "@/components/home/how-it-works";
+import { JOB_CARD_SELECT } from "@/lib/jobs";
 import type { JobWithEmployer } from "@/lib/types/database";
 
 type Variant = "guest" | "student" | "employer" | "admin";
@@ -39,9 +40,7 @@ export default async function Home() {
   if (showFeed) {
     const { data } = await supabase
       .from("jobs_with_employer")
-      .select(
-        "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_verification_status, employer_rating_avg, employer_rating_count",
-      )
+      .select(JOB_CARD_SELECT)
       .eq("is_disabled", false)
       .order("created_at", { ascending: false })
       .limit(6);

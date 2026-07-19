@@ -44,6 +44,8 @@ export async function EmployerJobsTab({
     sort === "title"
       ? query.order("title", { ascending: true })
       : query.order("created_at", { ascending: sort === "oldest" });
+  // Stable tiebreak — see the note in lib/reviews.ts applyReviewSort.
+  query = query.order("id", { ascending: false });
 
   // Offer counts per job: one scoped read tallied in JS. PostgREST has no
   // group-by, and an employer's contract volume is small.

@@ -5,18 +5,23 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
- * Prev/next pager over ?page= (1-based), preserving every other param. Server
- * pages pair it with `.range()` — see `pageRange` in `lib/paging.ts`. Renders
- * nothing when everything fits on one page.
+ * Prev/next pager, preserving every other param. Server pages pair it with
+ * `.range()` — see `pageRange` in `lib/paging.ts`. Renders nothing when
+ * everything fits on one page.
+ *
+ * `param` exists because a route can host two independent lists: /profile/[id]
+ * pages its posted jobs on ?jobsPage= and its reviews on ?reviewsPage=.
  */
 export function Pagination({
   page,
   pageSize,
   total,
+  param = "page",
 }: {
   page: number;
   pageSize: number;
   total: number;
+  param?: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -27,9 +32,9 @@ export function Pagination({
 
   const go = (n: number) => {
     const next = new URLSearchParams(params.toString());
-    if (n > 1) next.set("page", String(n));
-    else next.delete("page");
-    router.push(`${pathname}?${next.toString()}`);
+    if (n > 1) next.set(param, String(n));
+    else next.delete(param);
+    router.push(`${pathname}?${next.toString()}`, { scroll: true });
   };
 
   const first = (page - 1) * pageSize + 1;

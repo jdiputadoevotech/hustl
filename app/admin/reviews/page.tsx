@@ -8,6 +8,8 @@ import { ConfirmSubmit } from "@/components/marketplace/confirm-submit";
 import { SubmitButton } from "@/components/marketplace/submit-button";
 import { TabsNav } from "@/components/shared/tabs-nav";
 import { SearchInput } from "@/components/shared/search-input";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE, pageRange } from "@/lib/paging";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { setReviewArchived, deleteReviewAdmin } from "@/app/admin/actions";
@@ -25,11 +27,15 @@ type ReviewRow = {
   contracts: unknown; // nested jobs embed, normalized via reviewJob
 };
 
+const REVIEW_ADMIN_SELECT =
+  "id, rating, comment, archived, employer_id, reviewer_id, contract_id, created_at, contracts:contract_id ( jobs ( id, title ) )";
+
 type SearchParams = Promise<{
   tab?: string;
   q?: string;
   focus?: string;
   error?: string;
+  page?: string;
 }>;
 
 const TABS = ["visible", "archived", "reported"] as const;
@@ -40,19 +46,11 @@ export default async function AdminReviewsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { tab, q, focus, error } = await searchParams;
+  const { tab, q, focus, error, page: pageParam } = await searchParams;
+  const { page, from, to, size } = pageRange(pageParam, PAGE_SIZE);
 
   // Service-role read: bypass RLS so archived reviews are visible to admins.
   const admin = createAdminClient();
-  let query = admin
-    .from("reviews")
-    .select(
-      "id, rating, comment, archived, employer_id, reviewer_id, contract_id, created_at, contracts:contract_id ( jobs ( id, title ) )",
-    )
-    .order("created_at", { ascending: false });
-  if (q) query = query.ilike("comment", `%${q}%`);
-  const { data } = await query;
-  const all = (data ?? []) as ReviewRow[];
 
   // Open reports per review → report counts + the "Reported" bucket.
   const { data: openReports } = await admin
@@ -63,9 +61,14 @@ export default async function AdminReviewsPage({
   const reportCount = new Map<string, number>();
   for (const r of openReports ?? [])
     reportCount.set(r.target_id, (reportCount.get(r.target_id) ?? 0) + 1);
+  const reportedIds = [...reportCount.keys()];
 
   // A report link (?focus=) may point at an archived review — land on its tab.
-  const focused = focus ? all.find((r) => r.id === focus) : undefined;
+  // One row lookup rather than scanning the whole table, so it still works when
+  // the focused review isn't on the current page.
+  const { data: focused } = focus
+    ? await admin.from("reviews").select("archived").eq("id", focus).maybeSingle()
+    : { data: null };
   const current: Tab = focused
     ? focused.archived
       ? "archived"
@@ -74,17 +77,54 @@ export default async function AdminReviewsPage({
       ? (tab as Tab)
       : "visible";
 
-  const counts = {
-    visible: all.filter((r) => !r.archived).length,
-    archived: all.filter((r) => r.archived).length,
-    reported: all.filter((r) => reportCount.has(r.id)).length,
+  // Tab predicates now run in SQL instead of filtering a full table read in JS.
+  // `.in()` rejects an empty list, so an empty Reported bucket matches the nil
+  // UUID — i.e. nothing — rather than erroring.
+  const NO_MATCH = "00000000-0000-0000-0000-000000000000";
+
+  // `q` is deliberately excluded from the counts, so the tab strip shows bucket
+  // totals rather than search hits — matching the other admin pages.
+  const countFor = (forTab: Tab) => {
+    const base = admin.from("reviews").select("*", { count: "exact", head: true });
+    if (forTab === "visible") return base.eq("archived", false);
+    if (forTab === "archived") return base.eq("archived", true);
+    return reportedIds.length ? base.in("id", reportedIds) : base.eq("id", NO_MATCH);
   };
-  const rows =
+
+  const listBase = admin
+    .from("reviews")
+    .select(REVIEW_ADMIN_SELECT, { count: "exact" });
+  let listQuery = (
     current === "visible"
-      ? all.filter((r) => !r.archived)
+      ? listBase.eq("archived", false)
       : current === "archived"
-        ? all.filter((r) => r.archived)
-        : all.filter((r) => reportCount.has(r.id));
+        ? listBase.eq("archived", true)
+        : reportedIds.length
+          ? listBase.in("id", reportedIds)
+          : listBase.eq("id", NO_MATCH)
+  )
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false }); // stable tiebreak for paging
+  if (q) listQuery = listQuery.ilike("comment", `%${q}%`);
+
+  const [
+    { count: visibleCount },
+    { count: archivedCount },
+    { count: reportedTotal },
+    { data, count: total },
+  ] = await Promise.all([
+    countFor("visible"),
+    countFor("archived"),
+    countFor("reported"),
+    listQuery.range(from, to),
+  ]);
+
+  const counts = {
+    visible: visibleCount ?? 0,
+    archived: archivedCount ?? 0,
+    reported: reportedTotal ?? 0,
+  };
+  const rows = (data ?? []) as ReviewRow[];
 
   // Batch-hydrate reviewer + employer names in one profiles read.
   const profileIds = new Set<string>();
@@ -238,6 +278,8 @@ export default async function AdminReviewsPage({
           })}
         </ul>
       )}
+
+      <Pagination page={page} pageSize={size} total={total ?? 0} />
     </div>
   );
 }

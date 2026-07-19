@@ -11,6 +11,8 @@ import { TabsNav } from "@/components/shared/tabs-nav";
 import { SearchInput } from "@/components/shared/search-input";
 import { RoleFilter } from "@/components/admin/role-filter";
 import { VerificationFilter } from "@/components/admin/verification-filter";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE, pageRange } from "@/lib/paging";
 import { monthYear } from "@/lib/time";
 import {
   setUserRole,
@@ -35,12 +37,19 @@ type UserRow = Pick<
   | "created_at"
 >;
 
+const USER_SELECT =
+  "id, full_name, role, archived, flagged_at, flag_reason, verification_status, messenger_username, created_at";
+
+const TABS = ["active", "flagged", "archived", "admins"] as const;
+type Tab = (typeof TABS)[number];
+
 type SearchParams = Promise<{
   tab?: string;
   q?: string;
   role?: string;
   verification?: string;
   error?: string;
+  page?: string;
 }>;
 
 const V_LABEL: Record<VerificationStatus, string> = {
@@ -55,48 +64,86 @@ export default async function AdminUsersPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { tab = "active", q = "", role, verification, error } =
-    await searchParams;
+  const {
+    tab = "active",
+    q = "",
+    role,
+    verification,
+    error,
+    page: pageParam,
+  } = await searchParams;
+  const current: Tab = TABS.includes(tab as Tab) ? (tab as Tab) : "active";
+  const { page, from, to, size } = pageRange(pageParam, PAGE_SIZE);
   const supabase = await createClient();
 
-  // profiles SELECT is public, so the normal client reads every row.
-  let query = supabase
+  // Tab membership in SQL rather than filtering a full-table read in JS.
+  // `role` and `archived` are NOT NULL in the schema, so .neq/.eq are safe.
+  // Written as inline chains rather than a generic helper — a generic over the
+  // query builder makes TS give up with "type instantiation excessively deep".
+  //
+  // Counts stay scoped to the search (matching this page's previous behaviour)
+  // but ignore the role/verification filters, which only narrow the list.
+  const countFor = (forTab: Tab) => {
+    const b = supabase.from("profiles").select("*", { count: "exact", head: true });
+    const scoped =
+      forTab === "archived"
+        ? b.eq("archived", true)
+        : forTab === "admins"
+          ? b.eq("role", "admin")
+          : forTab === "flagged"
+            ? b.not("flagged_at", "is", null).neq("role", "admin")
+            : b.eq("archived", false).neq("role", "admin");
+    return q ? scoped.ilike("full_name", `%${q}%`) : scoped;
+  };
+
+  const listBase = supabase
     .from("profiles")
-    .select(
-      "id, full_name, role, archived, flagged_at, flag_reason, verification_status, messenger_username, created_at",
-    )
-    .order("created_at", { ascending: false });
-  if (q) query = query.ilike("full_name", `%${q}%`);
-  const { data } = await query;
-  const all = (data ?? []) as UserRow[];
+    .select(USER_SELECT, { count: "exact" });
+  let listQuery = (
+    current === "archived"
+      ? listBase.eq("archived", true)
+      : current === "admins"
+        ? listBase.eq("role", "admin")
+        : current === "flagged"
+          ? listBase.not("flagged_at", "is", null).neq("role", "admin")
+          : listBase.eq("archived", false).neq("role", "admin")
+  )
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false }); // stable tiebreak for paging
+  if (q) listQuery = listQuery.ilike("full_name", `%${q}%`);
+  // Role + verification filters apply to the Users/Archived tabs.
+  if (current !== "admins" && role) listQuery = listQuery.eq("role", role);
+  if (verification) listQuery = listQuery.eq("verification_status", verification);
+
+  const [
+    { count: activeCount },
+    { count: flaggedCount },
+    { count: archivedCount },
+    { count: adminsCount },
+    { data, count: total },
+  ] = await Promise.all([
+    countFor("active"),
+    countFor("flagged"),
+    countFor("archived"),
+    countFor("admins"),
+    listQuery.range(from, to),
+  ]);
+
+  const counts = {
+    active: activeCount ?? 0,
+    flagged: flaggedCount ?? 0,
+    archived: archivedCount ?? 0,
+    admins: adminsCount ?? 0,
+  };
+  const rows = (data ?? []) as UserRow[];
 
   // Enrich with email from auth.users (not on profiles) via the admin client.
-  // ponytail: single page of 1000; add pagination if the user count outgrows it.
+  // ponytail: single page of 1000; the auth API can't filter by an id list, so
+  // this stays a bulk read even though the list itself is now paged. Switch to
+  // per-id getUserById lookups if the user count outgrows one page.
   const admin = createAdminClient();
   const { data: authList } = await admin.auth.admin.listUsers({ perPage: 1000 });
   const emailById = new Map(authList.users.map((u) => [u.id, u.email ?? ""]));
-
-  const counts = {
-    active: all.filter((u) => !u.archived && u.role !== "admin").length,
-    flagged: all.filter((u) => u.flagged_at && u.role !== "admin").length,
-    archived: all.filter((u) => u.archived).length,
-    admins: all.filter((u) => u.role === "admin").length,
-  };
-  const inTab = (u: UserRow) =>
-    tab === "archived"
-      ? u.archived
-      : tab === "flagged"
-        ? Boolean(u.flagged_at) && u.role !== "admin"
-        : tab === "admins"
-          ? u.role === "admin"
-          : !u.archived && u.role !== "admin";
-  // Role + verification filters apply to the Users/Archived tabs.
-  const rows = all.filter(
-    (u) =>
-      inTab(u) &&
-      (tab === "admins" || !role || u.role === role) &&
-      (!verification || u.verification_status === verification),
-  );
 
   return (
     <div className="space-y-6">
@@ -108,7 +155,7 @@ export default async function AdminUsersPage({
       {error && <FormError>{error}</FormError>}
 
       <TabsNav
-        current={tab}
+        current={current}
         tabs={[
           { key: "active", label: "Users", count: counts.active },
           { key: "flagged", label: "Flagged", count: counts.flagged },
@@ -118,11 +165,11 @@ export default async function AdminUsersPage({
       />
 
       <div className="flex flex-wrap gap-2">
-        {tab !== "admins" && <RoleFilter selected={role} />}
+        {current !== "admins" && <RoleFilter selected={role} />}
         <VerificationFilter selected={verification} />
       </div>
 
-      {tab === "admins" && (
+      {current === "admins" && (
         <form
           action={addAdminByEmail}
           className="flex flex-wrap items-end gap-2 rounded-lg border bg-muted/40 p-4"
@@ -145,7 +192,11 @@ export default async function AdminUsersPage({
       )}
 
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No users here.</p>
+        // `page > 1` rather than a count check: past the last page PostgREST
+        // returns no usable total, so count reads as 0.
+        <p className="text-sm text-muted-foreground">
+          {page > 1 ? "That page is empty." : "No users here."}
+        </p>
       ) : (
         <ul className="divide-y rounded-lg border">
           {rows.map((u) => {
@@ -281,6 +332,8 @@ export default async function AdminUsersPage({
           })}
         </ul>
       )}
+
+      <Pagination page={page} pageSize={size} total={total ?? 0} />
     </div>
   );
 }

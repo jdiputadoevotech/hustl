@@ -18,12 +18,16 @@ import { ReviewsSection } from "@/components/marketplace/reviews-section";
 import { ReviewForm } from "@/components/marketplace/review-form";
 import { FaqAccordion } from "@/components/marketplace/faq-accordion";
 import { QuickFaq } from "@/components/marketplace/quick-faq";
-import {
-  reviewJob,
-  type ReviewItem,
-} from "@/components/marketplace/review-list";
 import { formatPay, payPeriodLabel } from "@/lib/pay";
 import { timeAgo } from "@/lib/time";
+import { PAGE_SIZE, pageRange } from "@/lib/paging";
+import {
+  REVIEW_SELECT,
+  applyReviewSort,
+  asReviewSort,
+  fetchReviewStats,
+  toReceivedReviewItems,
+} from "@/lib/reviews";
 import { deleteJob, toggleJobVisibility } from "../actions";
 import type { Faq, JobType, PayPeriod } from "@/lib/types/database";
 
@@ -33,6 +37,8 @@ type SearchParams = Promise<{
   reportError?: string;
   contractOk?: string;
   contractError?: string;
+  page?: string;
+  rsort?: string;
 }>;
 
 export default async function JobDetailPage({
@@ -43,8 +49,21 @@ export default async function JobDetailPage({
   searchParams: SearchParams;
 }) {
   const { id } = await params;
-  const { reportOk, reportError, contractOk, contractError } =
-    await searchParams;
+  const {
+    reportOk,
+    reportError,
+    contractOk,
+    contractError,
+    page: pageParam,
+    rsort,
+  } = await searchParams;
+  const reviewSort = asReviewSort(rsort);
+  const {
+    page: reviewPage,
+    from: rFrom,
+    to: rTo,
+    size: rSize,
+  } = pageRange(pageParam, PAGE_SIZE);
   const supabase = await createClient();
 
   const { data: job, error: jobError } = await supabase
@@ -70,37 +89,23 @@ export default async function JobDetailPage({
   // (the jobs_with_employer view drops it too). Treat a direct link as missing.
   if (employer?.deactivated_at) notFound();
 
-  // Reviews are about employers. Fetch the full list (with each reviewer's
-  // name) so we can show individual reviews, then derive the aggregate from it.
-  const { data: reviewsRaw } = await supabase
-    .from("reviews")
-    .select(
-      "id, rating, comment, created_at, reviewer_id, profiles:reviewer_id ( full_name ), contracts:contract_id ( jobs ( id, title ) )",
-    )
-    .eq("employer_id", job.employer_id)
-    .eq("archived", false) // hide admin-archived reviews from the public
-    .order("created_at", { ascending: false });
-  const reviews: ReviewItem[] = (reviewsRaw ?? []).map((r) => {
-    const rJob = reviewJob(r.contracts);
-    return {
-      id: r.id,
-      rating: r.rating,
-      comment: r.comment,
-      created_at: r.created_at,
-      // reviewer_id is null once the reviewing student deletes their account.
-      reviewer_name: r.reviewer_id
-        ? ((r.profiles as unknown as { full_name: string | null } | null)
-            ?.full_name ?? null)
-        : "Deleted user",
-      profile_id: r.reviewer_id, // links to the reviewing student; null once deleted
-      author_id: r.reviewer_id, // review author (the student), for report gating
-      job_id: rJob.id,
-      job_title: rJob.title,
-    };
-  });
-  const rCount = reviews.length;
-  const rAvg =
-    rCount > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / rCount : 0;
+  // Reviews are about employers, so this is every review for this employer —
+  // one page of them for display, plus the aggregate over all of them (that
+  // query reads only the `rating` column, so it stays cheap).
+  const [{ data: reviewsRaw }, reviewStats] = await Promise.all([
+    applyReviewSort(
+      supabase
+        .from("reviews")
+        .select(REVIEW_SELECT)
+        .eq("employer_id", job.employer_id)
+        .eq("archived", false), // hide admin-archived reviews from the public
+      reviewSort,
+    ).range(rFrom, rTo),
+    fetchReviewStats(supabase, job.employer_id),
+  ]);
+  const reviews = toReceivedReviewItems(reviewsRaw);
+  const rCount = reviewStats.count;
+  const rAvg = reviewStats.avg;
 
   const user = await getCurrentUser();
   const isOwner = user?.id === job.employer_id;
@@ -274,8 +279,10 @@ export default async function JobDetailPage({
 
           <ReviewsSection
             reviews={reviews}
-            avg={rAvg}
-            count={rCount}
+            stats={reviewStats}
+            page={reviewPage}
+            pageSize={rSize}
+            sort={reviewSort}
             viewerId={user?.id}
             reportRedirect={`/jobs/${job.id}`}
           />

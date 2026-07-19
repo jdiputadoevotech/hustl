@@ -79,6 +79,7 @@ export async function ContractsTab({
       .select(CONTRACT_SELECT, { count: "exact" })
       .eq(ownerColumn, userId)
       .order("created_at", { ascending: sort === "oldest" })
+      .order("id", { ascending: false }) // stable tiebreak for paging
       .range(from, to);
 
     if (searchFilter) query = query.or(searchFilter);

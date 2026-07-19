@@ -21,6 +21,7 @@ type SearchParams = Promise<{
   sort?: string;
   page?: string;
   job?: string;
+  rsort?: string;
   contractOk?: string;
   contractError?: string;
 }>;
@@ -149,6 +150,7 @@ export default async function DashboardPage({
           userId={user.id}
           isEmployer={isEmployer}
           returnTo={returnTo}
+          params={params}
         />
       )}
     </div>

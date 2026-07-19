@@ -8,6 +8,8 @@ import { TabsNav } from "@/components/shared/tabs-nav";
 import { SearchInput } from "@/components/shared/search-input";
 import { CategoryFilter } from "@/components/marketplace/category-filter";
 import { JobTypeFilter } from "@/components/marketplace/job-type-filter";
+import { Pagination } from "@/components/shared/pagination";
+import { PAGE_SIZE, pageRange } from "@/lib/paging";
 import { monthYear } from "@/lib/time";
 import { setJobHidden, deleteJob } from "@/app/admin/actions";
 
@@ -29,6 +31,7 @@ type SearchParams = Promise<{
   type?: string;
   category?: string;
   error?: string;
+  page?: string;
 }>;
 
 export default async function AdminJobsPage({
@@ -36,8 +39,16 @@ export default async function AdminJobsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { tab = "active", q = "", type, category, error } = await searchParams;
+  const {
+    tab = "active",
+    q = "",
+    type,
+    category,
+    error,
+    page: pageParam,
+  } = await searchParams;
   const hidden = tab === "hidden";
+  const { page, from, to, size } = pageRange(pageParam, PAGE_SIZE);
   const supabase = await createClient();
 
   // Counts (independent of the text/type/category filters) for the tab strip.
@@ -56,13 +67,16 @@ export default async function AdminJobsPage({
     .from("jobs_with_employer")
     .select(
       "id, title, job_type, category, is_disabled, created_at, employer_id, employer_name, employer_establishment_name",
+      { count: "exact" },
     )
     .eq("is_disabled", hidden)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false }) // stable tiebreak for paging
+    .range(from, to);
   if (q) query = query.ilike("title", `%${q}%`);
   if (type) query = query.eq("job_type", type);
   if (category) query = query.eq("category", category);
-  const { data } = await query;
+  const { data, count: total } = await query;
   const rows = (data ?? []) as JobRow[];
 
   return (
@@ -145,6 +159,8 @@ export default async function AdminJobsPage({
           ))}
         </ul>
       )}
+
+      <Pagination page={page} pageSize={size} total={total ?? 0} />
     </div>
   );
 }

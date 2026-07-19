@@ -11,6 +11,9 @@ import {
   type SortValue,
 } from "@/components/marketplace/sort-dropdown";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/shared/pagination";
+import { JOB_CARD_SELECT } from "@/lib/jobs";
+import { GRID_PAGE_SIZE, pageRange } from "@/lib/paging";
 
 export const metadata = { title: "Saved jobs — Hustl" };
 
@@ -19,6 +22,7 @@ type SearchParams = Promise<{
   type?: string;
   sort?: string;
   max?: string;
+  page?: string;
 }>;
 
 export default async function SavedJobsPage({
@@ -29,8 +33,9 @@ export default async function SavedJobsPage({
   const user = await getCurrentUser();
   if (!user) redirect("/auth/login");
 
-  const { category, type, sort, max } = await searchParams;
+  const { category, type, sort, max, page: pageParam } = await searchParams;
   const activeSort: SortValue = sort === "pay" ? "pay" : "newest";
+  const { page, from, to, size } = pageRange(pageParam, GRID_PAGE_SIZE);
 
   const supabase = await createClient();
   const { data: me } = await supabase
@@ -40,39 +45,54 @@ export default async function SavedJobsPage({
     .single();
   if (me?.role !== "student") redirect("/jobs"); // bookmarks are a student feature
 
-  // Newest-saved first. Fetch the ids, then the (still-visible) job rows.
-  const { data: saved } = await supabase
+  // The sort key (saved_jobs.created_at) lives on a different table than the
+  // filters (jobs.*), so paging either side alone gives wrong pages. An !inner
+  // join lets one query own both: filters on the embedded table narrow the
+  // parent, and the count is the real total. Sorting by jobs(pay_max) orders
+  // the parent — verified against PostgREST, not assumed.
+  let idQuery = supabase
     .from("saved_jobs")
-    .select("job_id")
+    .select("job_id, jobs!inner( id )", { count: "exact" })
     .eq("student_id", user.id)
-    .order("created_at", { ascending: false });
-  const ids = saved?.map((s) => s.job_id) ?? [];
+    .eq("jobs.is_disabled", false) // hide jobs the owner has since hidden/drafted
+    .range(from, to);
 
-  let query = supabase
-    .from("jobs_with_employer")
-    .select(
-      "id, title, category, job_type, pay_min, pay_max, pay_period, skills, location, work_mode, term, is_urgent, created_at, employer_name, employer_establishment_name, employer_verification_status, employer_rating_avg, employer_rating_count",
-    )
-    .in("id", ids)
-    .eq("is_disabled", false); // hide jobs the owner has since hidden/drafted
+  if (category) idQuery = idQuery.eq("jobs.category", category);
+  if (type) idQuery = idQuery.eq("jobs.job_type", type);
+  if (max && Number(max) > 0) idQuery = idQuery.lte("jobs.pay_min", Number(max));
 
-  if (category) query = query.eq("category", category);
-  if (type) query = query.eq("job_type", type);
-  if (max && Number(max) > 0) query = query.lte("pay_min", Number(max));
-  // Highest pay sorts by pay_max; otherwise keep saved order (applied below).
-  if (activeSort === "pay") {
-    query = query.order("pay_max", { ascending: false, nullsFirst: false });
-  }
+  idQuery =
+    activeSort === "pay"
+      ? idQuery.order("jobs(pay_max)", { ascending: false, nullsFirst: false })
+      : idQuery.order("created_at", { ascending: false }); // newest-saved first
+  // Stable tiebreak — see the note in lib/reviews.ts applyReviewSort.
+  idQuery = idQuery.order("id", { ascending: false });
 
-  const { data: jobs } = ids.length ? await query : { data: [] };
+  const { data: savedPage, count: total } = await idQuery;
+  const ids = savedPage?.map((s) => s.job_id) ?? [];
 
-  // Default sort: restore newest-saved order (the .in() query doesn't preserve it).
-  let rows = jobs ?? [];
-  if (activeSort !== "pay") {
-    const byId = new Map(rows.map((j) => [j.id, j]));
-    rows = ids.map((id) => byId.get(id)).filter(Boolean) as typeof rows;
-  }
-  const count = rows.length;
+  // Hydrate just this page's ids with the full card data.
+  const { data: jobs } = ids.length
+    ? await supabase
+        .from("jobs_with_employer")
+        .select(JOB_CARD_SELECT)
+        .in("id", ids)
+    : { data: [] };
+
+  // .in() doesn't preserve order — restore the order the page query established.
+  const byId = new Map((jobs ?? []).map((j) => [j.id, j]));
+  const rows = ids
+    .map((id) => byId.get(id))
+    .filter(Boolean) as NonNullable<typeof jobs>;
+
+  const count = total ?? 0;
+
+  // Does this student have any saves at all? Distinguishes "nothing saved" from
+  // "nothing matched these filters" without loading every saved row.
+  const { count: savedTotal } = await supabase
+    .from("saved_jobs")
+    .select("*", { count: "exact", head: true })
+    .eq("student_id", user.id);
 
   return (
     <div className="flex flex-col gap-6 py-2">
@@ -100,15 +120,21 @@ export default async function SavedJobsPage({
         <SortDropdown selected={activeSort} />
       </div>
 
-      {count === 0 ? (
+      {rows.length === 0 ? (
         <div className="py-10 text-center space-y-3">
+          {/* `page > 1` first: past the last page, PostgREST returns no usable
+              total, so `count` collapses to 0 and would read as "no matches". */}
           <p className="text-muted-foreground">
-            {ids.length === 0
-              ? "No saved jobs yet."
-              : "No saved jobs match these filters."}
+            {page > 1
+              ? "That page is empty."
+              : savedTotal === 0
+                ? "No saved jobs yet."
+                : "No saved jobs match these filters."}
           </p>
           <Button asChild size="sm">
-            <Link href="/jobs">Browse jobs</Link>
+            <Link href={page > 1 ? "/saved" : "/jobs"}>
+              {page > 1 ? "Back to the first page" : "Browse jobs"}
+            </Link>
           </Button>
         </div>
       ) : (
@@ -142,6 +168,8 @@ export default async function SavedJobsPage({
           ))}
         </div>
       )}
+
+      <Pagination page={page} pageSize={size} total={count} />
     </div>
   );
 }
