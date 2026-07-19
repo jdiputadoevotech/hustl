@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Badge } from "@/components/ui/badge";
 import { FormError } from "@/components/marketplace/form-error";
 import { SubmitButton } from "@/components/marketplace/submit-button";
-import { AdminTabs } from "@/components/admin/admin-tabs";
+import { TabsNav } from "@/components/shared/tabs-nav";
 import { timeAgo } from "@/lib/time";
 import { resolveReport, dismissReport, reopenReport } from "@/app/admin/actions";
 import type {
@@ -106,7 +106,7 @@ export default async function AdminReportsPage({
 
       {error && <FormError>{error}</FormError>}
 
-      <AdminTabs
+      <TabsNav
         current={status}
         tabs={[
           { key: "open", label: "Open", count: counts.open },

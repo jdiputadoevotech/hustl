@@ -20,6 +20,7 @@ export function CategoryFilter({ selected }: { selected?: string }) {
     const next = new URLSearchParams(params.toString());
     if (category) next.set("category", category);
     else next.delete("category");
+    next.delete("page"); // filtering invalidates the current offset
     router.push(`${pathname}?${next.toString()}`);
   };
 

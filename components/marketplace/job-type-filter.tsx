@@ -23,6 +23,7 @@ export function JobTypeFilter({ selected }: { selected?: string }) {
     const next = new URLSearchParams(params.toString());
     if (type) next.set("type", type);
     else next.delete("type");
+    next.delete("page"); // filtering invalidates the current offset
     router.push(`${pathname}?${next.toString()}`);
   };
 

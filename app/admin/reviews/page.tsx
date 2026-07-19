@@ -6,8 +6,8 @@ import { FormError } from "@/components/marketplace/form-error";
 import { StarRating } from "@/components/marketplace/star-rating";
 import { ConfirmSubmit } from "@/components/marketplace/confirm-submit";
 import { SubmitButton } from "@/components/marketplace/submit-button";
-import { AdminTabs } from "@/components/admin/admin-tabs";
-import { AdminSearch } from "@/components/admin/admin-search";
+import { TabsNav } from "@/components/shared/tabs-nav";
+import { SearchInput } from "@/components/shared/search-input";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { setReviewArchived, deleteReviewAdmin } from "@/app/admin/actions";
@@ -109,12 +109,12 @@ export default async function AdminReviewsPage({
           <Star className="h-6 w-6" />
           Reviews
         </h1>
-        <AdminSearch placeholder="Search review text…" />
+        <SearchInput placeholder="Search review text…" />
       </div>
 
       {error && <FormError>{error}</FormError>}
 
-      <AdminTabs
+      <TabsNav
         current={current}
         tabs={[
           { key: "visible", label: "Visible", count: counts.visible },

@@ -16,18 +16,33 @@ export const SORT_OPTIONS = [
 
 export type SortValue = (typeof SORT_OPTIONS)[number]["value"];
 
-/** "Sort by: <label>" dropdown (Fiverr-style, text trigger). */
-export function SortDropdown({ selected }: { selected: SortValue }) {
+export interface SortOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * "Sort by: <label>" dropdown (Fiverr-style, text trigger). Defaults to the
+ * marketplace options; pass `options` for lists that sort on other fields
+ * (the dashboard uses newest/oldest/title).
+ */
+export function SortDropdown({
+  selected,
+  options = SORT_OPTIONS as readonly SortOption[],
+}: {
+  selected: string;
+  options?: readonly SortOption[];
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const pathname = usePathname();
 
-  const current =
-    SORT_OPTIONS.find((o) => o.value === selected) ?? SORT_OPTIONS[0];
+  const current = options.find((o) => o.value === selected) ?? options[0];
 
   const go = (value: string) => {
     const next = new URLSearchParams(params.toString());
     next.set("sort", value);
+    next.delete("page"); // a new order invalidates the current offset
     router.push(`${pathname}?${next.toString()}`);
   };
 
@@ -39,7 +54,7 @@ export function SortDropdown({ selected }: { selected: SortValue }) {
         <ChevronDown className="h-4 w-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {SORT_OPTIONS.map((o) => (
+        {options.map((o) => (
           <DropdownMenuItem key={o.value} onClick={() => go(o.value)}>
             {o.label}
           </DropdownMenuItem>

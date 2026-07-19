@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/marketplace/form-error";
 import { ConfirmSubmit } from "@/components/marketplace/confirm-submit";
 import { SubmitButton } from "@/components/marketplace/submit-button";
-import { AdminSearch } from "@/components/admin/admin-search";
+import { SearchInput } from "@/components/shared/search-input";
 import { monthYear } from "@/lib/time";
 import { setVerification } from "@/app/admin/actions";
 import type { Profile } from "@/lib/types/database";
@@ -44,7 +44,7 @@ export default async function AdminVerificationPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Verification requests</h1>
-        <AdminSearch placeholder="Search by name…" />
+        <SearchInput placeholder="Search by name…" />
       </div>
 
       {error && <FormError>{error}</FormError>}

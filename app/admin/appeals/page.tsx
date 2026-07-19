@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Badge } from "@/components/ui/badge";
 import { FormError } from "@/components/marketplace/form-error";
 import { ConfirmSubmit } from "@/components/marketplace/confirm-submit";
-import { AdminTabs } from "@/components/admin/admin-tabs";
+import { TabsNav } from "@/components/shared/tabs-nav";
 import { timeAgo } from "@/lib/time";
 import { resolveAppeal } from "@/app/admin/actions";
 import type { FlagAppeal, AppealStatus } from "@/lib/types/database";
@@ -63,7 +63,7 @@ export default async function AdminAppealsPage({
 
       {error && <FormError>{error}</FormError>}
 
-      <AdminTabs
+      <TabsNav
         current={status}
         tabs={[
           { key: "open", label: "Open", count: counts.open },

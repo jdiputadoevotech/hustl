@@ -22,6 +22,7 @@ export function BudgetFilter({ max }: { max?: string }) {
   // Radix DropdownMenu handles open coordination (only one filter open at a time)
   // via its shared dismissable layer.
   const push = (next: URLSearchParams) => {
+    next.delete("page"); // filtering invalidates the current offset
     router.push(`${pathname}?${next.toString()}`);
     setOpen(false);
   };

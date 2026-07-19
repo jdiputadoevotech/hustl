@@ -4,8 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { FormError } from "@/components/marketplace/form-error";
 import { ConfirmSubmit } from "@/components/marketplace/confirm-submit";
 import { SubmitButton } from "@/components/marketplace/submit-button";
-import { AdminTabs } from "@/components/admin/admin-tabs";
-import { AdminSearch } from "@/components/admin/admin-search";
+import { TabsNav } from "@/components/shared/tabs-nav";
+import { SearchInput } from "@/components/shared/search-input";
 import { CategoryFilter } from "@/components/marketplace/category-filter";
 import { JobTypeFilter } from "@/components/marketplace/job-type-filter";
 import { monthYear } from "@/lib/time";
@@ -69,12 +69,12 @@ export default async function AdminJobsPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Jobs</h1>
-        <AdminSearch placeholder="Search by title…" />
+        <SearchInput placeholder="Search by title…" />
       </div>
 
       {error && <FormError>{error}</FormError>}
 
-      <AdminTabs
+      <TabsNav
         current={tab}
         tabs={[
           { key: "active", label: "Active", count: activeCount ?? undefined },

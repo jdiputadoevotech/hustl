@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/marketplace/form-error";
 import { ConfirmSubmit } from "@/components/marketplace/confirm-submit";
 import { SubmitButton } from "@/components/marketplace/submit-button";
-import { AdminTabs } from "@/components/admin/admin-tabs";
-import { AdminSearch } from "@/components/admin/admin-search";
+import { TabsNav } from "@/components/shared/tabs-nav";
+import { SearchInput } from "@/components/shared/search-input";
 import { RoleFilter } from "@/components/admin/role-filter";
 import { VerificationFilter } from "@/components/admin/verification-filter";
 import { monthYear } from "@/lib/time";
@@ -102,12 +102,12 @@ export default async function AdminUsersPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Users</h1>
-        <AdminSearch placeholder="Search by name…" />
+        <SearchInput placeholder="Search by name…" />
       </div>
 
       {error && <FormError>{error}</FormError>}
 
-      <AdminTabs
+      <TabsNav
         current={tab}
         tabs={[
           { key: "active", label: "Users", count: counts.active },
