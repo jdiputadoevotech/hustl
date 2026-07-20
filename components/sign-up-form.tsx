@@ -52,7 +52,9 @@ export function SignUpForm({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
+          // Home + login modal: `/` is public, so the proxy won't bounce a
+          // confirm link that arrives without readable session cookies.
+          emailRedirectTo: `${window.location.origin}/?auth=login`,
         },
       });
       if (error) throw error;

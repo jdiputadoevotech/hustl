@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { createClient } from "@/lib/supabase/client";
 import { LoginForm } from "@/components/login-form";
 import { SignUpForm } from "@/components/sign-up-form";
 
@@ -112,6 +113,9 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
  * Opens the modal when the URL carries ?auth=login|signup (e.g. after logout),
  * then strips the param so it doesn't re-fire on refresh/back. useSearchParams
  * makes this reactive to client navigations; Suspense-wrapped by the provider.
+ *
+ * Skips opening if a session already exists — the email-confirmation link points
+ * here too, and Supabase may have signed the user in on the way.
  */
 function AuthParamWatcher() {
   const { open } = useAuthModal();
@@ -120,10 +124,17 @@ function AuthParamWatcher() {
   const auth = searchParams.get("auth");
 
   useEffect(() => {
-    if (auth === "login" || auth === "signup") {
-      open(auth);
-      router.replace(window.location.pathname);
-    }
+    if (auth !== "login" && auth !== "signup") return;
+    router.replace(window.location.pathname);
+    let cancelled = false;
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (!cancelled && !data.user) open(auth);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [auth, open, router]);
 
   return null;

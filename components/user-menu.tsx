@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { logout } from "@/lib/logout";
 import { AvatarInitials } from "@/components/marketplace/avatar-initials";
 import {
   DropdownMenu,
@@ -23,15 +22,6 @@ export function UserMenu({
   name: string;
   isAdmin?: boolean;
 }) {
-  const router = useRouter();
-
-  const logout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/?auth=login");
-    router.refresh();
-  };
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="relative outline-none rounded-full focus-visible:ring-2 focus-visible:ring-ring">

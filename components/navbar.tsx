@@ -53,7 +53,7 @@ export async function Navbar() {
             type="search"
             placeholder="Search for jobs, gigs, and roles"
             aria-label="Search jobs"
-            className="h-12 w-full rounded-l-md border border-r-0 border-input bg-transparent px-5 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-12 w-full rounded-l-md border border-r-0 border-input bg-white px-5 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <button
             type="submit"
