@@ -94,12 +94,10 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // First-run onboarding: non-.edu users must pick student/employer once. The
-  // flag lives in JWT user_metadata (set by completeOnboarding), so no DB query
-  // here. .edu users are auto-students and exempt — the .edu test mirrors
-  // canBecomeEmployer() in lib/auth.ts (kept inline; that module pulls in the
-  // server client, which can't be imported into the proxy runtime).
-  const email = (user?.email as string) ?? "";
+  // First-run onboarding: every user completes it once. .edu users skip the
+  // role picker (they're auto-students) but still owe us a Messenger handle and
+  // a school name — the onboarding page decides that from the email. The flag
+  // lives in JWT user_metadata (set by completeOnboarding), so no DB query here.
   const onboarded = Boolean(
     (user?.user_metadata as Record<string, unknown> | undefined)?.onboarded,
   );
@@ -107,7 +105,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/api");
-  if (user && !onboarded && !/\.edu(\.|$)/i.test(email) && !onboardingExempt) {
+  if (user && !onboarded && !onboardingExempt) {
     const url = request.nextUrl.clone();
     url.pathname = "/onboarding";
     return NextResponse.redirect(url);

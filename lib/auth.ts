@@ -21,6 +21,15 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 }
 
 /**
+ * Guard for auth pages (login / sign-up / forgot-password / resend-confirmation).
+ * A signed-in user has no business on them, so send them to the dashboard —
+ * which re-routes admins to /admin/overview.
+ */
+export async function redirectIfAuthenticated(): Promise<void> {
+  if (await getCurrentUser()) redirect("/dashboard");
+}
+
+/**
  * Students use .edu emails and can't become employers. Matches ".edu" as a
  * domain segment so "x.education.com" doesn't false-positive.
  */

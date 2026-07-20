@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/marketplace/submit-button";
 import { FormError } from "@/components/marketplace/form-error";
 import { LogoutButton } from "@/components/logout-button";
 import { completeOnboarding } from "@/app/onboarding/actions";
+import type { Socials } from "@/lib/types/database";
 
 type Role = "student" | "employer";
 
@@ -33,13 +34,33 @@ const ROLES: {
   },
 ];
 
+export type OnboardingDefaults = {
+  full_name: string;
+  messenger_username: string;
+  establishment_name: string;
+  establishment_description: string;
+  bio: string;
+  skills: string;
+  socials: Socials;
+};
+
 /**
- * Post-signup role picker for non-.edu users. The establishment field is the
- * user's school (student, required) or company (employer, optional); employers
- * additionally describe what they do. The server action re-validates.
+ * Post-signup setup. Non-.edu users pick student/employer first; .edu users are
+ * auto-students (`canEmploy` false) and go straight to the fields, no picker.
+ * The establishment field is the user's school (student, required) or company
+ * (employer, optional); employers additionally describe what they do. The server
+ * action re-validates — the hidden role input below is not trusted.
  */
-export function OnboardingFlow({ error }: { error?: string }) {
-  const [role, setRole] = useState<Role | null>(null);
+export function OnboardingFlow({
+  error,
+  canEmploy,
+  defaults,
+}: {
+  error?: string;
+  canEmploy: boolean;
+  defaults: OnboardingDefaults;
+}) {
+  const [role, setRole] = useState<Role | null>(canEmploy ? null : "student");
   const isEmployer = role === "employer";
 
   return (
@@ -54,9 +75,13 @@ export function OnboardingFlow({ error }: { error?: string }) {
         <p className="text-2xl font-bold">
           Welcome to Hustl<span className="text-green-500">.</span>
         </p>
-        <h1 className="text-xl font-semibold">How will you use Hustl?</h1>
+        <h1 className="text-xl font-semibold">
+          {canEmploy ? "How will you use Hustl?" : "Finish setting up your account"}
+        </h1>
         <p className="text-muted-foreground">
-          Pick one to set up your account. You can change this later.
+          {canEmploy
+            ? "Pick one to set up your account. You can change this later."
+            : "A few details so employers can find and reach you. You can change these later."}
         </p>
       </header>
 
@@ -64,40 +89,42 @@ export function OnboardingFlow({ error }: { error?: string }) {
         {error && <FormError id="onboarding-error">{error}</FormError>}
         <input type="hidden" name="role" value={role ?? ""} />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {ROLES.map(({ value, title, blurb, Icon }) => {
-            const selected = role === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setRole(value)}
-                aria-pressed={selected}
-                className={cn(
-                  "flex flex-col items-start gap-3 rounded-xl border bg-card p-6 text-left shadow-sm transition-colors hover:bg-accent/50",
-                  selected
-                    ? "border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500 dark:bg-emerald-950/20"
-                    : "border-input",
-                )}
-              >
-                <Icon
+        {canEmploy && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {ROLES.map(({ value, title, blurb, Icon }) => {
+              const selected = role === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRole(value)}
+                  aria-pressed={selected}
                   className={cn(
-                    "size-7",
+                    "flex flex-col items-start gap-3 rounded-xl border bg-card p-6 text-left shadow-sm transition-colors hover:bg-accent/50",
                     selected
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-muted-foreground",
+                      ? "border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500 dark:bg-emerald-950/20"
+                      : "border-input",
                   )}
-                />
-                <span className="space-y-1">
-                  <span className="block font-semibold">{title}</span>
-                  <span className="block text-sm text-muted-foreground">
-                    {blurb}
+                >
+                  <Icon
+                    className={cn(
+                      "size-7",
+                      selected
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-muted-foreground",
+                    )}
+                  />
+                  <span className="space-y-1">
+                    <span className="block font-semibold">{title}</span>
+                    <span className="block text-sm text-muted-foreground">
+                      {blurb}
+                    </span>
                   </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {role && (
           <div className="space-y-6 rounded-xl border bg-card p-6 shadow-sm">
@@ -107,6 +134,7 @@ export function OnboardingFlow({ error }: { error?: string }) {
                 id="full_name"
                 name="full_name"
                 required
+                defaultValue={defaults.full_name}
                 placeholder="Juan dela Cruz"
               />
             </div>
@@ -117,6 +145,7 @@ export function OnboardingFlow({ error }: { error?: string }) {
                 id="messenger_username"
                 name="messenger_username"
                 required
+                defaultValue={defaults.messenger_username}
                 placeholder="e.g. juan.delacruz (powers m.me/<username>)"
               />
               <p className="text-xs text-muted-foreground">
@@ -134,6 +163,7 @@ export function OnboardingFlow({ error }: { error?: string }) {
                 name="establishment_name"
                 maxLength={120}
                 required={!isEmployer}
+                defaultValue={defaults.establishment_name}
                 placeholder={
                   isEmployer
                     ? "BrightLeaf Studio (optional — blank posts as independent)"
@@ -157,6 +187,7 @@ export function OnboardingFlow({ error }: { error?: string }) {
                   name="establishment_description"
                   rows={3}
                   required
+                  defaultValue={defaults.establishment_description}
                   placeholder="What your establishment does, or the kind of work you offer."
                 />
               </div>
@@ -168,6 +199,7 @@ export function OnboardingFlow({ error }: { error?: string }) {
                 id="bio"
                 name="bio"
                 rows={4}
+                defaultValue={defaults.bio}
                 placeholder="A little about you (optional)."
               />
             </div>
@@ -177,6 +209,7 @@ export function OnboardingFlow({ error }: { error?: string }) {
               <Input
                 id="skills"
                 name="skills"
+                defaultValue={defaults.skills}
                 placeholder="Figma, React, Tutoring (comma-separated, optional)"
               />
             </div>
@@ -188,18 +221,21 @@ export function OnboardingFlow({ error }: { error?: string }) {
                   name="social_facebook"
                   type="url"
                   aria-label="Facebook URL"
+                  defaultValue={defaults.socials.facebook ?? ""}
                   placeholder="Facebook"
                 />
                 <Input
                   name="social_instagram"
                   type="url"
                   aria-label="Instagram URL"
+                  defaultValue={defaults.socials.instagram ?? ""}
                   placeholder="Instagram"
                 />
                 <Input
                   name="social_linkedin"
                   type="url"
                   aria-label="LinkedIn URL"
+                  defaultValue={defaults.socials.linkedin ?? ""}
                   placeholder="LinkedIn"
                 />
               </div>
